@@ -4,7 +4,7 @@ from os.path import split, join
 from itertools import chain, product
 
 source_directory_list = ['lazyrunner']
-version = "0.01"
+version = "0.01v2"
 description="LazyRunner: Module based scientific experiment framework with lazy evaluation."
 author = "Hoyt Koepke"
 author_email="hoytak@gmail.com"
@@ -43,6 +43,8 @@ classifiers = [
     'Topic :: Scientific/Engineering'
     ]
 
+install_requires = ['treedict']
+
 if __name__ == '__main__':
 
     # Collect all the python modules
@@ -71,5 +73,6 @@ if __name__ == '__main__':
         scripts = scripts,
         classifiers = classifiers,
         url = url,
-        download_url = download_url)
+        download_url = download_url,
+        install_requires=install_requires)
 
