@@ -1,0 +1,2 @@
+include lazyrunner/*.py
+include LICENSE.txt

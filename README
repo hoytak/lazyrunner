@@ -1,0 +1,4 @@
+Follows standard python setup.py install procedure.  
+
+Test coverage is not superb.  A number of tests, mostly of preset
+stuff, work from test, cd test && ./run_tests.sh  should test these.
