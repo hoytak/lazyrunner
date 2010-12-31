@@ -5,6 +5,7 @@ The control base for the preset parameter definitions.
 from treedict import TreeDict
 import sys, textwrap
 import re
+import warnings
 
 ################################################################################
 # A few quick functions
