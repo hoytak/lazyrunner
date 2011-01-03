@@ -395,7 +395,7 @@ def applyPreset(*args):
                 print ""
 
             raise BadPreset("Bad preset value.")
-
+            
         _preset_lookup[n](ptree)
 
     return True

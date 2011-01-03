@@ -395,7 +395,7 @@ class Manager(object):
             if isPModule(name):
                 cls = getPModuleClass(name)
                 cls.preprocessParameters(parameters[name])
-                parameters[name]["__pmodule_version__"] = cls._getVersion()
+                parameters["__%s__pmodule_version__" % name] = cls._getVersion()
                 
             parameters.freeze(name)
             br_hash = self.parameter_branch_hash_cache[(id(parameters), name)] = parameters.hash(name)
