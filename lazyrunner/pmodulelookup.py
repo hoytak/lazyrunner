@@ -4,6 +4,7 @@ Manages the lookup tables for the module
 
 import logging
 import inspect
+from os.path import samefile
 
 from presets import registerPreset, addToRunQueue
 
@@ -24,10 +25,13 @@ def pmodule(c):
     assert type(name) is str
     
     if name in _module_lookup:
+        m = _module_lookup[name]
 
-        if c.__module__ != _module_lookup[name].__module__:
-            raise NameError("Module '%s' doubly defined (%s, %s)."
-                            % (name, c.__module__, _module_lookup[name].__module__))
+        cf = inspect.getfile(c)
+        mf = inspect.getfile(m)
+
+        if c is not m and cf != mf and not samefile(cf, mf):
+            raise NameError("Module '%s' doubly defined (%s, %s)." % (name, cf, mf))
         else:
             return
         
