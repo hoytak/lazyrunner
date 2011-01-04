@@ -111,6 +111,12 @@ class BadPreset(Exception): pass
 ################################################################################
 # Registering and looking up available presets
 
+def __presetTreeName(n):
+    return n + ".__preset__"
+
+def __cleanPresetTreeName(n):
+    return n.replace('.__preset__', "")
+
 def registerPreset(name, preset, branch = None, description = None,
                    apply = [], ignore_context = False):
     """
@@ -168,15 +174,17 @@ def registerPreset(name, preset, branch = None, description = None,
         raise TypeError("Preset '%s' must be callable" % name)
 
     # See if it's multiply defined; issue a warning if so
-    if name in _preset_keyset:
-        pw = _preset_lookup[name]
+    preset_tree_name = __presetTreeName(name)
+    
+    if preset_tree_name in _preset_keyset:
+        pw = _preset_lookup[preset_tree_name]
 
         if pw.action != preset:
             warnings.warn("Possible duplicate preset '%s'; ignoring second." % name)
             
     else:
         # Register it
-        _preset_lookup[name] = _PresetWrapper(name, branch, preset, description, apply)
+        _preset_lookup[preset_tree_name] = _PresetWrapper(name, branch, preset, description, apply)
         _preset_keyset.add(name)
 
 def registerPrefixDescription(prefix, description, ignore_context = False):
@@ -324,7 +332,7 @@ def allPresets():
     Returns a list of all the currently registered presets.
     """
 
-    return _preset_lookup.keys()
+    return [__cleanPresetTreeName(k) for k in _preset_lookup.keys()]
 
 ################################################################################
 # Applying the preset
@@ -377,10 +385,11 @@ def applyPreset(*args):
         n = n.lower()
 
         if n not in _preset_keyset:
+        
+            startwith_list = [__cleanPresetTreeName(k)
+                for k in _preset_lookup.iterkeys() if k.startswith(n)]
 
-            startwith_list = [k for k in _preset_lookup.iterkeys() if k.startswith(n)]
-
-            closest = _preset_lookup.getClosestKey(n, 5)
+            closest = __cleanPresetTreeName(_preset_lookup.getClosestKey(__presetTreeName(n), 5))
 
             for k in (set(closest) & set(startwith_list)):
                 closest.pop(closest.index(k))
@@ -396,7 +405,7 @@ def applyPreset(*args):
 
             raise BadPreset("Bad preset value.")
             
-        _preset_lookup[n](ptree)
+        _preset_lookup[__presetTreeName(n)](ptree)
 
     return True
 
@@ -617,7 +626,11 @@ def printPresetHelpList(n_list = None):
     global _preset_lookup
     global _preset_description_lookup
 
-    _preset_lookup.attach(recursive = True)
+    # This is to deal with the special case of presets also being names
+    pl_alt = TreeDict()
+    pl_alt.update( (__cleanPresetTreeName(k), v)
+                   for k,v in sorted(_preset_lookup.iteritems(), reverse=True) )
+
     _preset_description_lookup.attach(recursive = True)
 
     def printBlock(block):
@@ -634,11 +647,11 @@ def printPresetHelpList(n_list = None):
         # Have to sanitize the description tree
         headers = {}
 
-        for k, v in _preset_lookup.iteritems(recursive = True, branch_mode = 'only'):
+        for k in pl_alt.iterkeys(recursive = True, branch_mode = 'only'):
 
             query_key = k + ".__description__"
             
-            d = _preset_description_lookup.get(k + ".__description__", None)
+            d = _preset_description_lookup.get(query_key, None)
 
             if d is not None:
                 assert type(d) is str
@@ -652,13 +665,19 @@ def printPresetHelpList(n_list = None):
         groups = []
         singles = []
 
-        for n, v in sorted(_preset_lookup.iteritems(recursive = True, branch_mode = 'all')):
+        for n, v in sorted(pl_alt.iteritems(recursive = True, branch_mode = 'all')):
 
             if n in headers:
                 assert type(v) is TreeDict
                 current_prefix = n
-                groups.append( (headers[n], []) )
-                
+
+                kq = __presetTreeName(n)
+
+                if kq in _preset_lookup:
+                    groups.append( (headers[n], [(' < applied >', _preset_lookup[kq].description) ]) )
+                else:
+                    groups.append( (headers[n], []) )
+
             else:
                 assert isinstance(v, _PresetWrapper)
 

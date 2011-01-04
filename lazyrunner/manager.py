@@ -209,10 +209,35 @@ class Manager(object):
 
         p = self.getPreprocessedBranch(parameters, name)
 
-	getPModuleClass(name).reportResults(parameters, p, r)
+        try:
+            getPModuleClass(name).reportResults(parameters, p, r)
+        except TypeError, te:
 
+            rrf = getPModuleClass(name).reportResults
+
+            def raiseTypeError():
+                raise TypeError(("reportResults method in '%s' must be @classmethod "
+                                "and take global parameter tree, local parameter tree, "
+                                "and result tree as arguments.") % name)
+
+            # See if it was due to incompatable signature
+            try:
+                from inspect import getcallargs
+            except ImportError:
+                if "reportResults" in str(te):
+                    raiseTypeError()
+                else:
+                    raise te
+
+            try:
+                getcallargs(rrf, parameters, p, r)
+            except TypeError:
+                raiseTypeError()
+                
+            # Well, that wasn't the issue, so it's something internal; re-raise
+            raise
+        
 	self.reported_results.add( (name, key) )
-
 
     ##################################################
     # Cache file stuff
