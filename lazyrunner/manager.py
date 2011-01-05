@@ -263,12 +263,14 @@ class Manager(object):
 
         if (key, obj_name) in self.local_cache:
             in_cache = True
-        elif (not self.use_disk_cache 
-            or (obj_name == "results" and not self.__resultCachingEnabled(key[0]))):
-              
-            in_cache = False
         else:
-            in_cache = osp.exists(self.cacheFile(key, obj_name))
+            if self.use_disk_cache:
+                if (obj_name == "results" and not self.__resultCachingEnabled(key[0])):
+                    in_cache = False
+                else:
+                    in_cache = osp.exists(self.cacheFile(key, obj_name))
+            else:
+                in_cache = False
 
         if in_cache:
             self.log.debug("'%s' with key '%s' in cache." % (obj_name, str(key)))
@@ -290,7 +292,7 @@ class Manager(object):
         try:
             return self.local_cache[(key, obj_name)]
         except KeyError:
-            pass
+            assert self.use_disk_cache
 
         pt = loadResults(self.cacheFile(key, obj_name))
 
@@ -305,7 +307,6 @@ class Manager(object):
         """
         Saves a given object to cache.
         """
-
 
         key = self.__processKey(key, local_key_override, dependency_key_override)
 

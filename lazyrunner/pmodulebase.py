@@ -2,7 +2,9 @@ from copy import deepcopy, copy
 import logging
 from treedict import TreeDict
 from pmodulelookup import getPModuleClass, isPModule
+import re
 
+_key_processing_re = re.compile('[0-9a-zA-Z_]+')
     
 class PModule:
     """
@@ -229,6 +231,18 @@ class PModule:
 
 	return t.hash()
 
+    def __processKey(self, obj_name, key):
+
+        if type(obj_name) is not str:
+            raise TypeError("`obj_name` must be a string.")
+
+        if key is not None:
+            if type(key) is str and _key_processing_re(key) is not None:
+                return obj_name + key
+            else:
+                return obj_name + TreeDict(key = key).hash()
+        else:
+            return obj_name
 
     def inCache(self, obj_name, key = None, ignore_local = False, ignore_dependencies = False):
         """
@@ -259,18 +273,15 @@ class PModule:
         branch and is independent of the results of dependent modules,
         then it can be stored and loaded from cache more frequently by
         specifying ``ignore_dependencies=True``).
+        
         """
 
-        if type(obj_name) is not str:
-            raise TypeError("`obj_name` must be a string.")
-
-        if key is not None:
-            obj_name += "-" + TreeDict(key = key).hash()
+        name = self.__processKey(obj_name, key)
+        local_key_override = ("IGN" if ignore_local else None)
+        dependency_key_override = ("IGN" if ignore_dependencies else None)
         
-        return self.manager.inCache(self.key, obj_name,
-                                    local_key_override = ("IGN" if ignore_local else None),
-                                    dependency_key_override = ("IGN" if ignore_dependencies else None))
-    
+        return self.manager.inCache(self.key, name, local_key_override, dependency_key_override)
+                                    
     def loadFromCache(self, obj_name, key = None, ignore_local = False,
                       ignore_dependencies = False, create_function = None):
         """
@@ -316,30 +327,32 @@ class PModule:
               def create_listobj():
                   return [None]*self.p.list_length
 
-              L = self.loadFromCache("listobj", create_function = create_listobj)
+              L = self.loadFromCache(\"listobj\", create_function = create_listobj)
         
         """
+
+        name = self.__processKey(obj_name, key)
         
-        if type(obj_name) is not str:
-            raise TypeError("`obj_name` must be a string.")
-
-        if key is not None:
-            obj_name += "-" + TreeDict(key = key).hash()
-
-        self.log.debug("Trying to load %s from cache." % obj_name)
+        self.log.debug("Trying to load %s from cache." % name)
+        
+        local_key_override = ("IGN" if ignore_local else None)
+        dependency_key_override = ("IGN" if ignore_dependencies else None)
 
         if (create_function is not None
-            and not self.inCache(obj_name, ignore_local, ignore_dependencies)):
+            and not self.manager.inCache(self.key, name,
+                local_key_override, dependency_key_override)):
 
-            self.log.debug("%s not in cache; creating." % obj_name)
+            self.log.debug("%s not in cache; creating." % name)
 
             obj = create_function()
-            self.saveToCache(obj_name, obj, ignore_local, ignore_dependencies)
+            self.manager.saveToCache(self.key, name, obj,
+                                     local_key_override, dependency_key_override)
             return obj
         
         return self.manager.loadFromCache(self.key, obj_name,
-                                          local_key_override = ("IGN" if ignore_local else None),
-                                          dependency_key_override = ("IGN" if ignore_dependencies else None))
+            local_key_override, dependency_key_override)
+        
+        
 
     def saveToCache(self, obj_name, obj, key = None, ignore_local = False, ignore_dependencies = False):
         """
