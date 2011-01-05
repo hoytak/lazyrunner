@@ -382,6 +382,7 @@ def applyPreset(*args):
     ptree = ptree_list[0]
 
     for n in preset_names:
+    
         n = n.lower()
 
         if n not in _preset_keyset:
@@ -389,7 +390,8 @@ def applyPreset(*args):
             startwith_list = [__cleanPresetTreeName(k)
                 for k in _preset_lookup.iterkeys() if k.startswith(n)]
 
-            closest = __cleanPresetTreeName(_preset_lookup.getClosestKey(__presetTreeName(n), 5))
+            closest = [__cleanPresetTreeName(nc)
+                       for nc in _preset_lookup.getClosestKey(__presetTreeName(n), 5)]
 
             for k in (set(closest) & set(startwith_list)):
                 closest.pop(closest.index(k))
@@ -640,6 +642,7 @@ def printPresetHelpList(n_list = None):
         tw = textwrap.TextWrapper(width=80, subsequent_indent = " "*fwidth)
 
         for n, d in block:
+            assert type(d) is str
             print n + " "*(fwidth - len(n)) + '\n'.join(tw.wrap(d))
 
     if n_list is None:
@@ -674,6 +677,8 @@ def printPresetHelpList(n_list = None):
                 kq = __presetTreeName(n)
 
                 if kq in _preset_lookup:
+                    assert isinstance(_preset_lookup[kq], _PresetWrapper)
+                                      
                     groups.append( (headers[n], [(' < applied >', _preset_lookup[kq].description) ]) )
                 else:
                     groups.append( (headers[n], []) )
@@ -701,4 +706,4 @@ def printPresetHelpList(n_list = None):
         if singles:
             printBlock(singles)
     else:
-        printBlock([(n, _preset_lookup[n].description) for n in n_list])
+        printBlock([(n, _preset_lookup[__presetTreeName(n)].description) for n in n_list])
