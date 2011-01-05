@@ -4,6 +4,7 @@ Manages the lookup tables for the module
 
 import logging
 import inspect
+import re
 from os.path import samefile
 
 from presets import registerPreset, addToRunQueue
@@ -31,7 +32,12 @@ def pmodule(c):
         mf = inspect.getfile(m)
 
         if c is not m and cf != mf and not samefile(cf, mf):
-            raise NameError("Module '%s' doubly defined (%s, %s)." % (name, cf, mf))
+
+            # It's still possible that one file is the compiled
+            # version of the other file.
+
+            if not samefile(cf.replace('.pyc', '.py'), mf.replace('.pyc', '.py')):
+                raise NameError("Module '%s' doubly defined (%s, %s)." % (name, cf, mf))
         else:
             return
         
