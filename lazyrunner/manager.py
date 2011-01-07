@@ -390,7 +390,22 @@ class Manager(object):
         return (key[0],
                 key[1] if local_key_override is None else local_key_override,
                 key[2] if dependency_key_override is None else dependency_key_override)
-            
+
+    def _getKeyAsString(self, key, local_key_override, dependency_key_override):
+
+        assert type(key) is tuple
+        assert len(key) == 3
+        assert type(key[0]) is str
+        assert type(key[1]) is str
+        assert type(key[2]) is str
+        
+        if local_key_override is None and dependency_key_override is None:
+            return key
+
+        return "%s-%s-%s" % (key[0],
+                             key[1] if local_key_override is None else local_key_override,
+                             key[2] if dependency_key_override is None else dependency_key_override)
+        
             
     def cacheFile(self, key, obj_name, suffix=".cache"):
         assert self.cache_directory is not None
@@ -449,13 +464,11 @@ class Manager(object):
         name_cd = self.common_objects.setdefault(name, {})
 
         # Clear out non-persistent objects
-
-        for key, (is_persistent, obj) in name_cd.items():
+        for k, (is_persistent, obj) in name_cd.items():
             if not is_persistent:
-                del name_cd[key]
+                del name_cd[k]
             
         name_cd[key] = (persistent, obj)
-
 
 class DBWrapper(object):
     """

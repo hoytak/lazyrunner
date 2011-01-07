@@ -104,7 +104,7 @@ class PModule:
         self.manager = manager
 
         # Set the name of the local class
-        self.key = key
+        self.__key = key
 
         self.log = self._getLogger()
 	
@@ -280,7 +280,7 @@ class PModule:
         local_key_override = ("IGN" if ignore_local else None)
         dependency_key_override = ("IGN" if ignore_dependencies else None)
         
-        return self.manager.inCache(self.key, name, local_key_override, dependency_key_override)
+        return self.manager.inCache(self.__key, name, local_key_override, dependency_key_override)
                                     
     def loadFromCache(self, obj_name, key = None, ignore_local = False,
                       ignore_dependencies = False, create_function = None):
@@ -339,17 +339,17 @@ class PModule:
         dependency_key_override = ("IGN" if ignore_dependencies else None)
 
         if (create_function is not None
-            and not self.manager.inCache(self.key, name,
+            and not self.manager.inCache(self.__key, name,
                 local_key_override, dependency_key_override)):
 
             self.log.debug("%s not in cache; creating." % name)
 
             obj = create_function()
-            self.manager.saveToCache(self.key, name, obj,
+            self.manager.saveToCache(self.__key, name, obj,
                                      local_key_override, dependency_key_override)
             return obj
         
-        return self.manager.loadFromCache(self.key, obj_name,
+        return self.manager.loadFromCache(self.__key, obj_name,
             local_key_override, dependency_key_override)
         
         
@@ -395,7 +395,7 @@ class PModule:
 
         self.log.debug("Saving object '%s' to cache" % obj_name)
 
-        self.manager.saveToCache(self.key, obj_name, obj,
+        self.manager.saveToCache(self.__key, obj_name, obj,
                                  local_key_override = ("IGN" if ignore_local else None),
                                  dependency_key_override = ("IGN" if ignore_dependencies else None))
                                  
@@ -442,7 +442,8 @@ class PModule:
 
         return self.manager.getResults(pt, name)
 
-    def getCommonObject(self, name, key, creation_function, persistent = True):
+    def getCommonObject(self, name, key = None, creation_function = None,
+                        obj = None, persistent = True):
         """
         Returns a common object, such as a processing object/class,
         that can be shared between parts of the program.  This object
@@ -453,17 +454,46 @@ class PModule:
 
         Note that the key here does not depend on any aspect of the
         parameter tree except possibly through the user specified
-        `key`.
+        `key`.  If `key` is None, it is taken to be the local key of
+        the processing module (see :ref:`key`).
+
+        If `creation_function` is given, it is called to create the
+        object if it is not found in the common lookup table.
+        Alternately, if `object` is given, then this object is
+        inserted into the common lookups if it is not already present.
 
         If `persistent` is False (default True), then the object is
         deleted once another object with the same name is requested.
         """
 
+        if key is None:
+            key = self.key()
+
         if self.manager.inCommonObjectCache(name, key):
             return self.manager.getCommonObject(name, key)
+        
         else:
-            obj = creation_function()
+            if creation_function is not None:
+                obj = creation_function()
             
             self.manager.saveToCommonObjectCache(name, key, obj, persistent)
 
             return obj
+
+    def key(self, ignore_local=False, ignore_dependencies=False):
+        """
+        Returns a unique string representing the state of the current
+        processing module.  This string is a deterministic hash of the
+        parameters, possibly including dependencies, for the
+        processing module.  It's intended to be used for obtaining a
+        key for use in methods such as :ref:`getCommonObject`.
+
+        `ignore_dependencies` and `ignore_local` are handled in ways
+        identical to the caching functions.
+        """
+
+        local_key_override = ("IGN" if ignore_local else None)
+        dependency_key_override = ("IGN" if ignore_dependencies else None)
+
+        return self.manager._getKeyAsString(
+            self.__key, local_key_override, dependency_key_override)
