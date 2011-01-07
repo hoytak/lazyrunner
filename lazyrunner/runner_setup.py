@@ -83,8 +83,12 @@ def readyCMakeProjects(base_dir, opttree, config):
     # may switch so it runs in a specified build directory.
 
     if opttree.verbose_mode:
-        print "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
-        print "Compiling cmake projects.\n"
+        if opttree.no_compile:
+            print "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+            print "Loading cmake project library files.\n"
+        else:
+            print "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+            print "Compiling cmake projects.\n"
     
     for k, b in config.cmake.iteritems(recursive=False, branch_mode = "only"):
         d = abspath(join(base_dir, b.directory))
@@ -110,32 +114,38 @@ def readyCMakeProjects(base_dir, opttree, config):
 
         first_attempt = True
 
-        while True:
+        if not opttree.no_compile:
+            while True:
 
-            try:
-                if not exists(join(d, "Makefile")):
-                    run("cmake ./")
-                    
-                run("make --jobs -f Makefile")
-                    
-            except ConfigError, ce:
-                    
-                if first_attempt:
-                    print ("WARNING: Error while compiling cmake project '%s';"
-                           " removing cache files and retrying.") % k
-                    cleaning.clean_cmake_project(opttree, config, b)
-                    first_attempt = False
-                    continue
+                try:
+                    if not exists(join(d, "Makefile")):
+                        run("cmake ./")
 
-                else:
-                    raise ce
-                
-            break
+                    run("make --jobs -f Makefile")
+
+                except ConfigError, ce:
+
+                    if first_attempt:
+                        print ("WARNING: Error while compiling cmake project '%s';"
+                               " removing cache files and retrying.") % k
+                        cleaning.clean_cmake_project(opttree, config, b)
+                        first_attempt = False
+                        continue
+
+                    else:
+                        raise ce
+
+                break
 
         if not exists(b.library_file):
-            raise ConfigError("Expected shared library apparently not produced by compiliation: \n"
-                              + "  Subproject: %s " % k
-                              + "  Expected library file: %s" % (relpath(b.library_file)))
+            if opttree.no_compile:
+                raise ConfigError("Expected shared library apparently not present, recompiling needed?: \n"
+                                  + "  Subproject: %s " % k
+                                  + "  Expected library file: %s" % (relpath(b.library_file)))
+            else:
+                raise ConfigError("Expected shared library apparently not produced by compiliation: \n"
+                                  + "  Subproject: %s " % k
+                                  + "  Expected library file: %s" % (relpath(b.library_file)))
 
         # Dynamically load them here; this means they will be preloaded and the program will work
         loaded_ctype_dlls.append(ctypes.cdll.LoadLibrary(b.library_file))
@@ -148,6 +158,9 @@ def runBuildExt(base_dir, opttree, config):
     """
     Sets up and runs the python build_ext setup configuration.
     """
+
+    if opttree.no_compile:
+        return
 
     ct = config.cython
 
@@ -297,7 +310,6 @@ def runBuildExt(base_dir, opttree, config):
 
 def setup(base_dir, opttree, config):
     "The main setup function; calls the rest."
-
     readyCMakeProjects(base_dir, opttree, config)
     runBuildExt(base_dir, opttree, config)
 

@@ -15,11 +15,22 @@ Command line options
 
 The command line options (from running ``Z --help``) are as follows::
 
+  Usage: 
+  Z [options] preset1, preset2, ...
+
+  Queued Runner -- module based scientific programming.
+
+  Options:
     -h, --help                                      show this help message and exit
 
     Run Options:
-      -g, --debug                                   Turns on printing of configuration and log
-						    debug messages.
+      -g, --debug                                   Sets the logging level to debug, so all
+						    log.debug() messages are printed; turns on
+						    compiler debug flags.
+      -v, --verbose                                 Turns on more detailed printing of lazyrunner
+						    actions and messages.
+      -n, --no-compile                              Disable automatic recompiling of extension
+						    modules.
       -s <settings module/file>, --settings=<settings module/file>
 						    Run a specified settings file instead of
 						    'defaults'. (Path from settings/ subdirectory,
@@ -45,6 +56,11 @@ The command line options (from running ``Z --help``) are as follows::
 
     Querying and Information Options:
       -l, --list-presets                            List available presets and exit.
+
+    Cleaning / Deletion Options:
+      --clean                                       Clean all intermediate compiling files.
+
+
 
 Examples
 ========

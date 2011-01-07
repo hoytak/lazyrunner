@@ -39,6 +39,10 @@ if __name__ == '__main__':
                                help="Turns on more detailed printing of lazyrunner actions and messages.",
                                default=False)
 
+    running_options.add_option('-n', '--no-compile', dest='no_compile', action="store_true",
+                               help="Disable automatic recompiling of extension modules.",
+                               default=False)
+    
     running_options.add_option('-s', '--settings', 
                                help="Run a specified settings file instead of 'defaults'. "
                                "(Path from settings/ subdirectory, '.py suffix is optional).",
@@ -139,6 +143,7 @@ if __name__ == '__main__':
     opttree.force           = options.force
     opttree.cache_read_only = options.cache_read_only
     opttree.cache_directory = options.cache_directory
+    opttree.no_compile      = options.no_compile
     opttree.presets         = args
 
     ########################################
