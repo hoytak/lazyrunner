@@ -144,6 +144,9 @@ class Manager(object):
 
         r = self._getResults(parameters, name, key, module_instance = m)
 
+        # Give it the local results
+        m.local_results = r
+
 	# If we're calling from getResults, return r along with m
 	if calling_from_getresults:
 	    return m, r

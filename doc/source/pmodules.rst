@@ -1,3 +1,4 @@
+
 .. _pmodule:
 
 .. currentmodule:: lazyrunner
@@ -251,6 +252,14 @@ the processing easier:
   `critical <http://docs.python.org/library/logging.html#logging.critical>`_.
   
   TODO: make this specifiable in conf.py
+
+.. attribute:: local_results
+
+  Once a processing module is intialized, other methods of the class
+  can access the results given by :ref:`run`.  This attribute is set
+  only after :ref:`setup` and possibly :ref:`run` are called.  If the
+  pmodule results can be loaded from cache, then the attribute is
+  still set, even thought :ref:`run` may not have been called.
 
 .. attribute:: manager
 
