@@ -294,4 +294,6 @@ Interfacing with other PModules
 
 .. automethod:: PModule.getCommonObject
 
+.. automethod:: PModule.key
+
 .. _logger: http://docs.python.org/library/logging.html

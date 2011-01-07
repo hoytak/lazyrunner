@@ -4,14 +4,14 @@ from os.path import split, join
 from itertools import chain, product
 
 source_directory_list = ['lazyrunner']
-version = "0.01v2"
+version = "0.01v3"
 description="LazyRunner: Module based scientific experiment framework with lazy evaluation."
 author = "Hoyt Koepke"
 author_email="hoytak@gmail.com"
 name = 'lazyrunner'
 scripts = ['Z']
 url = "http://www.stat.washington.edu/~hoytak/code/lazyrunner/"
-download_url = "http://pypi.python.org/packages/source/l/lazyrunner/lazyrunner-0.01.tar.gz"
+download_url = "http://pypi.python.org/packages/source/l/lazyrunner/lazyrunner-0.01v3.tar.gz"
 long_description = \
 """
 LazyRunner is a framework for organized scientific computing. It aims
