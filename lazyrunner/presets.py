@@ -41,6 +41,12 @@ class _PresetContext(object):
 
         global _preset_context_stack
         global _combine
+
+        if prefix is not None:
+            prefix = prefix.lower()
+            
+        if branch is not None:
+            branch = branch.lower()
         
         checkNameValidity(prefix)
         checkNameValidity(branch)
@@ -112,7 +118,7 @@ class BadPreset(Exception): pass
 # Registering and looking up available presets
 
 def __presetTreeName(n):
-    return n + ".__preset__"
+    return n.lower() + ".__preset__"
 
 def __cleanPresetTreeName(n):
     return n.replace('.__preset__', "")
@@ -185,7 +191,7 @@ def registerPreset(name, preset, branch = None, description = None,
     else:
         # Register it
         _preset_lookup[preset_tree_name] = _PresetWrapper(name, branch, preset, description, apply)
-        _preset_keyset.add(name)
+        _preset_keyset.add(name.lower())
 
 def registerPrefixDescription(prefix, description, ignore_context = False):
     """
@@ -211,7 +217,7 @@ def registerPrefixDescription(prefix, description, ignore_context = False):
         raise ValueError("Either prefix must be given or "
                          "this must be called within a group context.")
 
-    _preset_description_lookup[prefix + ".__description__"] = \
+    _preset_description_lookup[prefix.lower() + ".__description__"] = \
          re.sub(r"\s+", " ", description)
     
     
