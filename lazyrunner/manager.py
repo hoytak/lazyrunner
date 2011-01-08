@@ -185,11 +185,9 @@ class Manager(object):
 	    self.debug_logged_dependencies.add( ("hash", name, d_set_str) )
 
         # Set the dependency hash
-        dep_hashes = TreeDict()
-        
         for d in d_set:
             if d != name:
-                dep_td[d] = self.getPreprocessedBranch(parameters, d)
+                dep_td[d] = self.getPreprocessedBranch(parameters, d, return_hash = True)[1]
 
         dep_hash = dep_td.hash()
         

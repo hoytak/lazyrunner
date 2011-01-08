@@ -3,8 +3,9 @@ import logging
 from treedict import TreeDict
 from pmodulelookup import getPModuleClass, isPModule
 import re
+from presets import applyPreset
 
-_key_processing_re = re.compile('[0-9a-zA-Z_]+')
+_key_processing_re = re.compile('[0-9a-zA-Z_]+').match
     
 class PModule:
     """
@@ -112,7 +113,8 @@ class PModule:
 	    self.log.info('Initializing Module %s.' % self._name)
 
         self.parameters = TreeDict()
-        self.raw_parameters = parameters
+        self.raw_parameters = parameters.copy()
+        self.raw_parameters.attach(recursive = True)
 
         name = self._name
 
@@ -283,7 +285,7 @@ class PModule:
         return self.manager.inCache(self.__key, name, local_key_override, dependency_key_override)
                                     
     def loadFromCache(self, obj_name, key = None, ignore_local = False,
-                      ignore_dependencies = False, create_function = None):
+                      ignore_dependencies = False, creation_function = None):
         """
         Loads the specific object from the cache if available.  If it
         is not available, a RuntimeError is raised.
@@ -314,8 +316,8 @@ class PModule:
         dependent modules, then it can be stored and loaded from cache
         more frequently by specifying ``ignore_dependencies=True``).
 
-        If `create_function` is not None, and the object is not in
-        cache, ``create_function()`` is called to create an instance
+        If `creation_function` is not None, and the object is not in
+        cache, ``creation_function()`` is called to create an instance
         of the object, which is then stored in cache and returned.
         For example, in the following code, the function ``create()``
         is called only if `listobj` is not in the cache::
@@ -327,7 +329,7 @@ class PModule:
               def create_listobj():
                   return [None]*self.p.list_length
 
-              L = self.loadFromCache(\"listobj\", create_function = create_listobj)
+              L = self.loadFromCache(\"listobj\", creation_function = create_listobj)
         
         """
 
@@ -338,18 +340,18 @@ class PModule:
         local_key_override = ("IGN" if ignore_local else None)
         dependency_key_override = ("IGN" if ignore_dependencies else None)
 
-        if (create_function is not None
+        if (creation_function is not None
             and not self.manager.inCache(self.__key, name,
                 local_key_override, dependency_key_override)):
 
             self.log.debug("%s not in cache; creating." % name)
 
-            obj = create_function()
+            obj = creation_function()
             self.manager.saveToCache(self.__key, name, obj,
                                      local_key_override, dependency_key_override)
             return obj
         
-        return self.manager.loadFromCache(self.__key, obj_name,
+        return self.manager.loadFromCache(self.__key, name,
             local_key_override, dependency_key_override)
         
         
@@ -386,21 +388,16 @@ class PModule:
         """
 
 
-        
-        if type(obj_name) is not str:
-            raise TypeError("`obj_name` must be a string.")
+        name = self.__processKey(obj_name, key)
 
-        if key is not None:
-            obj_name += "-" + TreeDict(key = key).hash()
+        self.log.debug("Saving object '%s' to cache" % name)
 
-        self.log.debug("Saving object '%s' to cache" % obj_name)
-
-        self.manager.saveToCache(self.__key, obj_name, obj,
+        self.manager.saveToCache(self.__key, name, obj,
                                  local_key_override = ("IGN" if ignore_local else None),
                                  dependency_key_override = ("IGN" if ignore_dependencies else None))
                                  
 
-    def getSpecificResults(self, name, name_p = None, full_ptree = None):
+    def getSpecificResults(self, name, name_p = None, full_ptree = None, apply_preset = None):
         """
         Returns the results from p-module `name`, with the parameters
         local to `name` being given (possibly in part) by `name_p`.
@@ -415,16 +412,20 @@ class PModule:
 
         would return those results.  
 
-        By default, all the parameters present in the default
-        parameter tree but not present in the given one are imported
-        from the default.  Thus it is only necessary to specify
-        modified parameters.
+        All the parameters present in the default parameter tree but
+        not present in the given one are imported from the default.
+        Thus it is only necessary to specify modified parameters.
 
         If additional parts of the `ptree` need to be changed from the
         default, they can be specified using `full_p`.  This has the
         same behavior as `name_p`, except that modifications are
         specified from the root of the parameter tree rather than the
         branch associated with `name`.
+
+        Alternatively, presets to be applied to the full parameter
+        tree may be passed in using `apply_preset`.  `apply_preset`,
+        if given, must be a single preset name or a list of valid
+        preset names.  If a list, they are applied in order.
         """
         
         # First make a copy of the full parameter tree.
@@ -439,6 +440,16 @@ class PModule:
         if name_p is not None:
             pt.makeBranch(name)
             pt[name].update(name_p)
+
+        if apply_preset is not None:
+            if type(apply_preset) is str:
+                applyPreset(pt, apply_preset)
+            elif type(apply_preset) is list or type(apply_preset) is tuple:
+                applyPreset(pt, *apply_preset)
+            else:
+                raise TypeError("apply_preset must be either string, list, or tuple (not %s)"
+                                % str(type(apply_preset)))
+            
 
         return self.manager.getResults(pt, name)
 
