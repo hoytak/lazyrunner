@@ -449,7 +449,7 @@ class PModule:
             else:
                 raise TypeError("apply_preset must be either string, list, or tuple (not %s)"
                                 % str(type(apply_preset)))
-            
+        pt.run_queue = []
 
         return self.manager.getResults(pt, name)
 

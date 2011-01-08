@@ -57,6 +57,9 @@ class Manager(object):
 
         # make sure that all the flags are removed from the parameter
         # tree; things should be reprocessed here.
+        parameters.attach(recursive = True)
+        parameters = parameters.copy()
+
 
         if name is None or type(name) in [list, tuple, set]:
             if name is None:
@@ -65,19 +68,25 @@ class Manager(object):
 
                 if type(name) is str:
                     name = [name]
-                
-            pt = parameters.copy()
+
+                self.log.debug("Results requested for modules %s, from run_queue." % (", ".join(name)))
+            else:
+                self.log.debug("Results requested for modules %s." % (", ".join(name)))
+
             r = TreeDict("results")
-            
-            for n in (nn.lower() for nn in name):
+
+            # important to have copy of run_queue here!
+            for n in [nn.lower() for nn in name]:
                 if n not in r:
-		    r[n] = self._getResults(pt, n)
+		    r[n] = self._getResults(parameters, n)
 
             r.freeze()
 
             return r
+        
         elif type(name) is str:
-            return self._getResults(parameters.copy(), name.lower())
+            self.log.debug("Results requested for module '%s'" % name)
+            return self._getResults(parameters, name.lower())
 
         else:
             raise TypeError("'%s' not a valid type for name parameter." % str(type(name)))
@@ -86,7 +95,9 @@ class Manager(object):
 
         assert type(name) is str
         name = name.lower()
-
+        
+        self.log.debug("Retriveing results for module '%s'" % name)
+            
         # Get the hash of this module
         if key is None:
             key = self._getModuleKey(parameters, name)
@@ -109,9 +120,9 @@ class Manager(object):
 		r.freeze()
 	    else:
 		r.freeze()
-		self.__reportResults(parameters, name, key, r)
-		
-	    self.saveToCache(key, "results", r)
+
+            self.saveToCache(key, "results", r)
+            self.__reportResults(parameters, name, key, r)
             
         return r
 
@@ -125,6 +136,8 @@ class Manager(object):
     def _getModule(self, parameters, name, key = None, calling_from_getresults = False):
 
         # Only save one module of each to keep the memory use down
+
+        self.log.debug("Retrieving module %s" % name)
 
         if key is None:
             key = self._getModuleKey(parameters, name)
@@ -311,14 +324,14 @@ class Manager(object):
 
         key = self.__processKey(key, local_key_override, dependency_key_override)
 
+        if obj_name == "results" and not self.__resultCachingEnabled(key[0]):
+            return
+
         self.log.debug("Saving '%s' to cache with key '%s'" % (obj_name, str(key)))
 
         self.local_cache[(key, obj_name)] = obj
 
-        if (not self.use_disk_cache
-            or self.disk_cache_read_only
-            or (obj_name == "results" and not self.__resultCachingEnabled(key[0]))):
-            
+        if (not self.use_disk_cache or self.disk_cache_read_only):
             return
 
         filename = self.cacheFile(key, obj_name)
