@@ -413,9 +413,6 @@ class Manager(object):
         assert type(key[1]) is str
         assert type(key[2]) is str
         
-        if local_key_override is None and dependency_key_override is None:
-            return key
-
         return "%s-%s-%s" % (key[0],
                              key[1] if local_key_override is None else local_key_override,
                              key[2] if dependency_key_override is None else dependency_key_override)
