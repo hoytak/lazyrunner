@@ -10,7 +10,12 @@ import sys
 
 def setupManagerOptions(base_dir, opttree, config):
     mp = TreeDict()
-    mp.cache_directory = config.cache_directory
+    
+    if opttree.cache_directory is None:
+        mp.cache_directory = config.cache_directory
+    else:
+        mp.cache_directory = opttree.cache_directory
+        
     mp.cache_read_only = opttree.cache_read_only
 
     if opttree.no_cache:
