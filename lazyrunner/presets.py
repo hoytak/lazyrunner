@@ -387,6 +387,10 @@ def applyPreset(*args):
        
     ptree = ptree_list[0]
 
+    # assume that it may be passed a branch of the parameter tree
+    ptree = ptree.rootNode()
+    ptree.attach(recursive = True)
+
     for n in preset_names:
     
         n = n.lower()
