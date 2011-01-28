@@ -6,6 +6,8 @@ import re
 from presets import applyPreset
 
 _key_processing_re = re.compile('[0-9a-zA-Z_]+').match
+
+from axisproxy import AxisProxy
     
 class PModule:
     """
@@ -508,3 +510,18 @@ class PModule:
 
         return self.manager._getKeyAsString(
             self.__key, local_key_override, dependency_key_override)
+
+    def getAxisProxy(self):
+        """
+        This method provides a way for users to generate matplotlib
+        plots without matplotlib being present.  It returns an
+        AxisProxy object which behaves exactly like a axis object from
+        matplotlib.  The difference is that it simply records all the
+        commands.
+
+        When the AxisProxy method saveAsScript() is called, it writes
+        a python script file that, when run in an environment with
+        matplotlib present, will generate the original plot.
+        """
+
+        return AxisProxy()
