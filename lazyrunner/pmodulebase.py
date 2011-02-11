@@ -486,10 +486,8 @@ class PModule:
             return self.manager.getCommonObject(name, key)
         
         else:
-            if creation_function is not None:
-                obj = creation_function()
-            
-            self.manager.saveToCommonObjectCache(name, key, obj, persistent)
+            self.manager.saveToCommonObjectCache(
+                name, key, None, persistent, creation_function)
 
             return obj
 

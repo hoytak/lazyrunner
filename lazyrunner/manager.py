@@ -470,7 +470,7 @@ class Manager(object):
         
         return self.common_objects[name][key][1]
 
-    def saveToCommonObjectCache(self, name, key, obj, persistent):
+    def saveToCommonObjectCache(self, name, key, obj, persistent, creation_function):
 
         name_cd = self.common_objects.setdefault(name, {})
 
@@ -478,6 +478,11 @@ class Manager(object):
         for k, (is_persistent, obj) in name_cd.items():
             if not is_persistent:
                 del name_cd[k]
+
+        # This allows creation after the previous one is deleted
+        if obj is None:
+            assert creation_function is not None
+            obj = creation_function()
             
         name_cd[key] = (persistent, obj)
 
