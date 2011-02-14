@@ -486,10 +486,8 @@ class PModule:
             return self.manager.getCommonObject(name, key)
         
         else:
-            self.manager.saveToCommonObjectCache(
-                name, key, None, persistent, creation_function)
-
-            return obj
+            return self.manager.saveToCommonObjectCache(
+                name, key, obj, persistent, creation_function)
 
     def key(self, ignore_local=False, ignore_dependencies=False):
         """

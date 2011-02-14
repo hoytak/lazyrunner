@@ -486,6 +486,8 @@ class Manager(object):
             
         name_cd[key] = (persistent, obj)
 
+        return obj
+
 class DBWrapper(object):
     """
     A thin wrapper around an sqlalchemy database.
