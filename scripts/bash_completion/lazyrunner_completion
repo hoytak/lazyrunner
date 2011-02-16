@@ -1,0 +1,20 @@
+
+
+# Completion script for lazyrunner.
+
+_Z() 
+{
+    local cur prev opts
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+
+    opts="-h --help -g --debug -v --verbose -n --no-compile -s --settings= --nocache --cache-read-only --ro --cache-directory= --init -f --force -m --new-module= -l --list-presets --clean"
+
+    if [ -f './.preset_completions' ] ; then
+	opts="${opts} `cat ./.preset_completions`"
+    fi
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+    return 0
+}
+complete -F _Z Z

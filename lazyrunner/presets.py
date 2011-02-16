@@ -717,3 +717,15 @@ def printPresetHelpList(n_list = None):
             printBlock(singles)
     else:
         printBlock([(n, _preset_lookup[__presetTreeName(n)].description) for n in n_list])
+
+def updatePresetCompletionCache(filename):
+    """
+    Saves a list of the current presets to a temporary file.  This is
+    to speed up tab completion for preset names.
+
+    """
+
+    f = open(filename, 'w')
+    f.write(" ".join(allPresets()))
+    f.close()
+    
