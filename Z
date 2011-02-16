@@ -14,6 +14,11 @@ from itertools import izip
 import subprocess, logging
 from treedict import TreeDict
 
+# A few global configuration options
+preset_name_cache_file = '.preset_completions'
+
+
+
 if __name__ == '__main__':
 
     ########################################
@@ -174,6 +179,8 @@ if __name__ == '__main__':
         import lazyrunner.presets as presets
 
         running.loadBase(base_dir, opttree)
+        presets.updatePresetCompletionCache(preset_name_cache_file)
+        
         print ""
         print "Available presets:"
         print "-"*50
@@ -186,7 +193,9 @@ if __name__ == '__main__':
        
     elif options.new_module is not None:
         import lazyrunner.creation as creation
+        import lazyrunner.presets as presets
         creation.createNewModule(base_dir, opttree, options.new_module)
+        presets.updatePresetCompletionCache(preset_name_cache_file)
 
     elif options.clean:
         import lazyrunner.running as running
@@ -201,7 +210,9 @@ if __name__ == '__main__':
             print "Warning: Running with no presets specified; use --help to get a list of options.\n"
 
         import lazyrunner.running as running
+        import lazyrunner.presets as presets
         running.run(base_dir, opttree)
+        presets.updatePresetCompletionCache(preset_name_cache_file)
 
         print ""
 
