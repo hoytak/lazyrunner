@@ -112,43 +112,61 @@ def readyCMakeProjects(base_dir, opttree, config):
             print "CMake: '%s' in '%s' " % (k,d)
 
 
-        first_attempt = True
+        retry_allowed = True
+        load_retry_allowed = True
 
-        if not opttree.no_compile:
-            while True:
+        while True:
 
-                try:
-                    if not exists(join(d, "Makefile")):
-                        run("cmake ./")
+            if not opttree.no_compile:
+                while True:
 
-                    run("make --jobs -f Makefile")
+                    try:
+                        if not exists(join(d, "Makefile")):
+                            run("cmake ./")
 
-                except ConfigError, ce:
+                        run("make --jobs -f Makefile")
 
-                    if first_attempt:
-                        print ("WARNING: Error while compiling cmake project '%s';"
-                               " removing cache files and retrying.") % k
-                        cleaning.clean_cmake_project(opttree, config, b)
-                        first_attempt = False
-                        continue
+                    except ConfigError, ce:
 
-                    else:
-                        raise ce
+                        if retry_allowed:
+                            print ("WARNING: Error while compiling cmake project '%s';"
+                                   " removing cache files and retrying.") % k
+                            cleaning.clean_cmake_project(opttree, config, b)
+                            retry_allowed = False
+                            continue
 
-                break
+                        else:
+                            raise
 
-        if not exists(b.library_file):
-            if opttree.no_compile:
-                raise ConfigError("Expected shared library apparently not present, recompiling needed?: \n"
-                                  + "  Subproject: %s " % k
-                                  + "  Expected library file: %s" % (relpath(b.library_file)))
-            else:
-                raise ConfigError("Expected shared library apparently not produced by compiliation: \n"
-                                  + "  Subproject: %s " % k
-                                  + "  Expected library file: %s" % (relpath(b.library_file)))
+                    break
 
-        # Dynamically load them here; this means they will be preloaded and the program will work
-        loaded_ctype_dlls.append(ctypes.cdll.LoadLibrary(b.library_file))
+            if not exists(b.library_file):
+                if opttree.no_compile:
+                    raise ConfigError("Expected shared library apparently not present, recompiling needed?: \n"
+                                      + "  Subproject: %s " % k
+                                      + "  Expected library file: %s" % (relpath(b.library_file)))
+                else:
+                    raise ConfigError("Expected shared library apparently not produced by compiliation: \n"
+                                      + "  Subproject: %s " % k
+                                      + "  Expected library file: %s" % (relpath(b.library_file)))
+
+            # Dynamically load them here; this means they will be preloaded and the program will work
+            try:
+                loaded_dll = ctypes.cdll.LoadLibrary(b.library_file)
+            except OSError, ose:
+
+                if load_retry_allowed:
+                    print "Error loading library: ", str(ose)
+                    print "Cleaning, attempting again."
+                    cleaning.clean_cmake_project(opttree, config, b)
+                    load_retry_allowed = False
+                    continue
+                else:
+                    raise
+
+            break
+                        
+        loaded_ctype_dlls.append(loaded_ctype_dlls)
 
     if opttree.verbose_mode:
         print "Done compiling and loading cmake library projects."
