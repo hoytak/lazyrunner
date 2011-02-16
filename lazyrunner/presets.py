@@ -6,6 +6,8 @@ from treedict import TreeDict
 import sys, textwrap
 import re
 import warnings
+import os, struct
+from os.path import commonprefix
 
 ################################################################################
 # A few quick functions
@@ -633,11 +635,175 @@ def _combine(k1, k2):
     else:
         return k1 + "." + k2
 
+def _getTerminalSize():
+    """
+    returns (lines:int, cols:int)
+    """
+
+    def ioctl_GWINSZ(fd):
+        import fcntl, termios
+        return struct.unpack("hh", fcntl.ioctl(fd, termios.TIOCGWINSZ, "1234"))
+    # try stdin, stdout, stderr
+    for fd in (0, 1, 2):
+        try:
+            return ioctl_GWINSZ(fd)
+        except:
+            pass
+    # try os.ctermid()
+    try:
+        fd = os.open(os.ctermid(), os.O_RDONLY)
+        try:
+            return ioctl_GWINSZ(fd)
+        finally:
+            os.close(fd)
+    except:
+        pass
+    
+    # try `stty size`
+    try:
+        return tuple(int(x) for x in os.popen("stty size", "r").read().split())
+    except:
+        pass
+    # try environment variables
+    try:
+        return tuple(int(os.getenv(var)) for var in ("LINES", "COLUMNS"))
+    except:
+        pass
+    # i give up. return default.
+    return (25, 80)
+
+
 def printPresetHelpList(n_list = None):
 
     global _preset_lookup
     global _preset_description_lookup
 
+    full_width = _getTerminalSize()[1]
+
+    name_width = 25 #max(int(full_width / 3), 30)
+
+    def printBlock(item_list, prefix="", width = None):
+
+        if width is None:
+            width = min(max(len(n) for n, d in item_list) + 2 + len(prefix), name_width)
+        else:
+            width += 2
+
+        wrap_width = full_width
+
+        for n, d in item_list:
+            d = d.strip()
+            n = n.strip()
+
+            if not n and not d:
+                continue
+            
+            if len(n) > width - len(prefix):
+                print prefix + n
+                initial = " "*(width + 2)
+            else:
+                initial = prefix + n + " "*(width - len(n))
+
+            if d:
+
+                print '\n'.join(textwrap.wrap(
+                    d, wrap_width,
+                    initial_indent = initial,
+                    subsequent_indent = " "*(width)))
+            else:
+                print initial
+        
+    # Once we have everything, run through it all
+    class Group:
+        def __init__(self, name, description):
+            self.name = name.strip()
+            self.description = description.strip()
+            self.items = {}
+
+        def add(self, name, description):
+            name = name.strip()
+            if not name:
+                return
+            
+            self.items[name] = description
+
+        def printGroup(self, width):
+
+            if not self.items:
+                return
+
+            print ""
+
+            if self.name:
+                print self.name + ": " + self.description
+                printBlock(sorted(self.items.iteritems()), "  ", width)
+            else:
+                printBlock(sorted(self.items.iteritems()), "", width+2)
+
+    class GroupOrganizer:
+
+        def __init__(self):
+
+            self.name_map = {}
+            self.group_map = {}
+
+        def addGroup(self, name, description):
+            name = name.strip()
+            description = description.strip()
+            self.group_map[name] = description
+
+        def addPreset(self, name, description):
+            name = name.strip()
+            description = description.strip()
+            if name:
+                self.name_map[name] = description
+
+        def printGroups(self):
+
+            if not self.name_map:
+                return
+            
+            def _getGroupName(group_map, name):
+
+                group = ''
+
+                if name in group_map:
+                    return name
+
+                # Get whether it's a part of a group
+                cur_pos = 0
+
+                while True:
+                    cur_pos = name.find('.', cur_pos+1)
+
+                    if cur_pos == -1:
+                        break
+
+                    if name[:cur_pos] in group_map:
+                        group = name[:cur_pos]
+
+                return group
+
+            # put all the groups together
+            groups = dict( (n, Group(n, d) ) for n, d in self.group_map.iteritems())
+            groups[''] = Group('', '')
+            
+            # put all the presets into groups
+            for n, d in self.name_map.iteritems():
+                g = _getGroupName(groups, n)
+                if g == n:
+                    groups[g].add(n, "(As preset) " + d)
+                else:
+                    groups[g].add(n, d)
+
+            print_width = max(len(n) for n in self.name_map.iterkeys())
+
+            # give them back
+            for k, g in sorted(groups.iteritems()):
+                g.printGroup(print_width)
+
+
+    ##################################################
     # This is to deal with the special case of presets also being names
     pl_alt = TreeDict()
     pl_alt.update( (__cleanPresetTreeName(k), v)
@@ -645,76 +811,25 @@ def printPresetHelpList(n_list = None):
 
     _preset_description_lookup.attach(recursive = True)
 
-    def printBlock(block):
-        fwidth = max(max(len(n) for n, d in block) + 2, 20)
-
-        # Check this
-        tw = textwrap.TextWrapper(width=80, subsequent_indent = " "*fwidth)
-
-        for n, d in block:
-            assert type(d) is str
-            print n + " "*(fwidth - len(n)) + '\n'.join(tw.wrap(d))
+    org = GroupOrganizer()
 
     if n_list is None:
 
         # Have to sanitize the description tree
-        headers = {}
-
         for k in pl_alt.iterkeys(recursive = True, branch_mode = 'only'):
-
             query_key = k + ".__description__"
-            
             d = _preset_description_lookup.get(query_key, None)
+            org.addGroup(k, d if d else "")
 
-            if d is not None:
-                assert type(d) is str
-                headers[k] = k + ":  " + d
+        for n in sorted(pl_alt.iterkeys(recursive = True, branch_mode = 'all')):
 
-            else:
-                headers[k] = k + ": "
+            k = __presetTreeName(n)
 
-        # Now go through and get a breakup of the different groups
-        current_prefix = None
-        groups = []
-        singles = []
+            if k in _preset_lookup:
+                org.addPreset(n, _preset_lookup[k].description)
 
-        for n, v in sorted(pl_alt.iteritems(recursive = True, branch_mode = 'all')):
+        org.printGroups()
 
-            if n in headers:
-                assert type(v) is TreeDict
-                current_prefix = n
-
-                kq = __presetTreeName(n)
-
-                if kq in _preset_lookup:
-                    assert isinstance(_preset_lookup[kq], _PresetWrapper)
-                                      
-                    groups.append( (headers[n], [(' < applied >', _preset_lookup[kq].description) ]) )
-                else:
-                    groups.append( (headers[n], []) )
-
-            else:
-                assert isinstance(v, _PresetWrapper)
-
-                if '.' not in n:
-                    singles.append( (n, v.description) )
-
-                else:
-                    if not n.startswith(current_prefix):
-                        n_base = n[:n.rfind('.')]
-                        assert current_prefix.startswith(n_base)
-                        current_prefix = n_base
-                        
-                    groups[-1][1].append((" " + n[len(current_prefix):], v.description))
-
-        # Now we're ready to print it all
-        for head, block in groups:
-            print head
-            printBlock(block)
-            print ""
-
-        if singles:
-            printBlock(singles)
     else:
         printBlock([(n, _preset_lookup[__presetTreeName(n)].description) for n in n_list])
 
