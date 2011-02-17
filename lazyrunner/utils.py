@@ -5,9 +5,6 @@ loaded_modules = {}
 
 def loadModule(d, m = None):
     """
-    Loads a module relative to the base directory base_dir.  `m` can
-    be of the form subdir.m_name, or None.  If None, d points to a
-    file/directory containing a module
     """
 
     if m is None:

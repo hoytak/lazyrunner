@@ -84,7 +84,6 @@ def loadBase(base_dir, opttree):
             loadModule(base_dir, m)
 
     except ConfigError, ce:
-        
         print "\nAborting due to error in configuration:"
         print str(ce), "\n"
         sys.exit(1)

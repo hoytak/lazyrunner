@@ -110,6 +110,8 @@ def loadConfigInformation(base_dir, opttree):
 
     cp = cm.config
 
+    print cp.makeReport()
+
     def set_and_check_value(n, default_value, possible_values):
         cp.setdefault(n, default_value)
         checkValue(cp[n], possible_values, "config.%s" % n)
@@ -135,31 +137,53 @@ def loadConfigInformation(base_dir, opttree):
     modules_to_import = set()
     cython_files = set()
 
-    for m in cp.import_list:
-        if exists(m):
-            if m.endswith(".py"):
-                modules_to_import.add(abspath(m[:-3]))
-            elif m.endswith(".pyx"):
-                cython_files.add(abspath(m))
-                modules_to_import.add(abspath(m[:-4]))
-            elif isdir(m):
-                modules_to_import.add(abspath(normpath(m)))
-            else:
-                raise ConfigError("Import file/module type of '%s' not supported." % m)
+    def process_import(m):
+        mf = join(base_dir, m)
+        mf2 = join(base_dir, m.replace('.', '/'))
 
-        elif exists(m + ".pyx"):
-            cython_files.add(abspath(m + ".pyx"))
-            modules_to_import.add(abspath(m))
+        if mf2.endswith('/pyx'):
+            mf2 = mf2[:-4] + ".pyx"
+        elif mf2.endswith('/py'):
+            mf2 = mf2[:-3] + ".py"
+        
+        if exists(mf):
+            return mf
+        elif exists(mf + ".pyx"):
+            return mf + ".pyx"
 
-            if exists(m + ".py"):
-                raise ConfigError("Both .py and .pyx files exist for module '%s'." % m)
+        elif exists(mf + ".py"):
+            return mf + ".py"
+        
+        elif exists(mf):
+            return mf
 
-        elif exists(m + ".py"):
-            modules_to_import.add(abspath(m))
-            
+        elif exists(mf + ".pyx"):
+            return mf + ".pyx"
+
+        elif exists(mf + ".py"):
+            return mf + ".py"
+
         else:
             raise ConfigError("Import file/module '%s' does not exist." % m)
         
+    cp.import_list = [process_import(m) for m in cp.import_list]
+
+    for m in cp.import_list:
+        if m.endswith(".py"):
+            modules_to_import.add(abspath(m[:-3]))
+            
+        elif m.endswith(".pyx"):
+            cython_files.add(abspath(m))
+            modules_to_import.add(abspath(m[:-4]))
+
+            if exists(m[:-1]):
+                raise ConfigError("Both .py and .pyx files exist for module '%s'." % m)
+            
+        elif isdir(m):
+            modules_to_import.add(abspath(normpath(m)))
+            
+        else:
+            raise ConfigError("Import file/module type of '%s' not supported." % m)
 
     # Recursively go through and add in directories with an __init__.py file
     if cp.add_all_with_init_file:
@@ -217,7 +241,7 @@ def loadConfigInformation(base_dir, opttree):
             raise ConfigError("'directory' parameter for cmake project '%s' not specified."
                              % ("cmake." + k))
 
-        b.directory = d = abspath(normpath(b.directory))
+        b.directory = d = abspath(normpath(join(base_dir, b.directory)))
 
         if not exists(d):
             raise ConfigError("Directory '%s' for cmake project '%s' does not exist." % (d,k))
