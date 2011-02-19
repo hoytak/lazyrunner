@@ -34,15 +34,15 @@ class PModule:
         return local_parameters
 
     @classmethod
-    def _getDependencySet(cls, parameters, dep_type):
+    def _getDependencySet(cls, manager, parameters, dep_type):
         
         assert dep_type in ["result", "module", "parameter"]
 
         # Get the dependency set that this one builds on
         if dep_type == "parameter":
-            dep_set = cls._getDependencySet(parameters, "result") | set([cls._name])
+            dep_set = cls._getDependencySet(manager, parameters, "result") | set([cls._name])
         elif dep_type == "result":
-            dep_set = cls._getDependencySet(parameters, "module")
+            dep_set = cls._getDependencySet(manager, parameters, "module")
         else:
             dep_set = set()
 
@@ -71,8 +71,13 @@ class PModule:
                 try:
                     dep_set |= process_dependency(dependency_function())
                 except TypeError:
-                    dep_set |= process_dependency(dependency_function(parameters))
-
+                    pb =  manager.getPreprocessedBranch(parameters, cls.name().lower())
+                    
+                    try:
+                        dep_set |= process_dependency(dependency_function(pb))
+                    except TypeError:
+                        dep_set |= process_dependency(dependency_function(pb, parameters))
+                        
         return dep_set
 
     @classmethod
@@ -123,7 +128,7 @@ class PModule:
         self.p = self.manager.getPreprocessedBranch(parameters, name)
         self.parameters[name] = self.p
 
-        for p_branch in self._getDependencySet(parameters, 'parameter'):
+        for p_branch in self._getDependencySet(manager, parameters, 'parameter'):
             self.parameters[p_branch] = self.manager.getPreprocessedBranch(parameters, p_branch)
 
         self.parameters.freeze()
@@ -134,7 +139,7 @@ class PModule:
 
             self.results = TreeDict('results')
         
-            for r in self._getDependencySet(parameters, 'result'):
+            for r in self._getDependencySet(manager, parameters, 'result'):
                 self.results[r] = self.manager._getResults(parameters, r)
 
             self.results.freeze()
@@ -142,7 +147,7 @@ class PModule:
             # Instantiate dependent modules
             self.modules = TreeDict('modules')
 
-            for m in self._getDependencySet(parameters, 'module'):
+            for m in self._getDependencySet(manager, parameters, 'module'):
                 self.modules[m] = self.manager._getModule(parameters, m)
 
             self.modules.freeze()

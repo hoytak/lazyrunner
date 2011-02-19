@@ -171,10 +171,10 @@ class Manager(object):
         def getHashDependencySet(n):
             
             pmc = getPModuleClass(n)
-            pdep_set = pmc._getDependencySet(parameters, "parameter")
+            pdep_set = pmc._getDependencySet(self, parameters, "parameter")
 
-            for d in (pmc._getDependencySet(parameters, "result")
-                      | pmc._getDependencySet(parameters, "module") ):
+            for d in (pmc._getDependencySet(self, parameters, "result")
+                      | pmc._getDependencySet(self, parameters, "module") ):
                 
                 if d != n:
                     pdep_set |= getHashDependencySet(d)
