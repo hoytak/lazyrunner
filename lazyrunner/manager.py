@@ -142,14 +142,17 @@ class Manager(object):
         if key is None:
             key = self._getModuleKey(parameters, name)
 
+        m = None
+
         if name in self.current_modules:
             cur_key, cur_m = self.current_modules[name]
 
             if cur_key == key:
-                return cur_m
-
-        self.log.debug("Instantiating module %s" % name)
-        m = getPModuleClass(name)(self, key, parameters, True)
+                m = cur_m
+                
+        if m is None:
+            self.log.debug("Instantiating module %s" % name)
+            m = getPModuleClass(name)(self, key, parameters, True)
 
         assert m._name == name, "m._name <- %s != %s -> name" % (m._name, name)
         
