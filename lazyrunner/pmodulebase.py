@@ -437,6 +437,26 @@ class PModule:
         
         # First make a copy of the full parameter tree.
 
+        pt = self.__getNewParamTree(name_p, full_ptree, apply_preset)
+        return self.manager.getResults(pt, name)
+
+    def getSpecificModule(self, name, name_p = None, full_ptree = None, apply_preset = None):
+        """
+        Returns a p-module `name` instantiated from the parameters
+        given.  These parameters are specified in the same way as
+        :meth:`getSpecificResults`, with `name_p` giving an update to
+        the p-module's local branch and `full_ptree` giving an update
+        to the global parameter tree.  If `apply_preset` is given, a
+        preset or list of presets are applied to the global parameter
+        tree.  
+        """
+        
+        pt = self.__getNewParamTree(name_p, full_ptree, apply_preset)
+        return self.manager.getModule(pt, name)
+
+    def __getNewParamTree(name_p, full_ptree, apply_preset):
+
+        # First make a copy of the full parameter tree.
         pt = self.raw_parameters.copy()
 
         if full_ptree is not None:
@@ -458,7 +478,8 @@ class PModule:
                                 % str(type(apply_preset)))
         pt.run_queue = []
 
-        return self.manager.getResults(pt, name)
+        return pt
+
 
     def getCommonObject(self, name, key = None, creation_function = None,
                         obj = None, persistent = True):

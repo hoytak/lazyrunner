@@ -292,6 +292,8 @@ Interfacing with other PModules
 
 .. automethod:: PModule.getSpecificResults
 
+.. automethod:: PModule.getSpecificModule
+
 .. automethod:: PModule.getCommonObject
 
 .. automethod:: PModule.key
