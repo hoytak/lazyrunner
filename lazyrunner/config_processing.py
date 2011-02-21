@@ -110,8 +110,6 @@ def loadConfigInformation(base_dir, opttree):
 
     cp = cm.config
 
-    print cp.makeReport()
-
     def set_and_check_value(n, default_value, possible_values):
         cp.setdefault(n, default_value)
         checkValue(cp[n], possible_values, "config.%s" % n)
