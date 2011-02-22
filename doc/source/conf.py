@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# TreeDict documentation build configuration file, created by
+# LazyRunner documentation build configuration file, created by
 # sphinx-quickstart on Fri Jan  1 12:51:35 2010.
 #
 # This file is execfile()d with the current directory set to its containing dir.
@@ -169,7 +169,7 @@ latex_paper_size = 'letter'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, document class [howto/manual]).
 latex_documents = [
-  ('index', 'TreeDict.tex', ur'TreeDict Documentation',
+  ('index', 'LazyRunner.tex', ur'LazyRunner Documentation',
    ur'Hoyt Koepke', 'manual'),
 ]
 
