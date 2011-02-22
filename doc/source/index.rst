@@ -43,6 +43,12 @@ framework.  LazyRunner's workflow -- a modular structure with
 centralized and hierarchical parameter organization -- works well for
 most scientific projects.
 
+Acknowledgments
+----------------
+
+Development of LazyRunner was supported in part by NGA grant
+HM1582-06-1-2035.
+
 .. toctree::
     :hidden:
     :maxdepth: 3
