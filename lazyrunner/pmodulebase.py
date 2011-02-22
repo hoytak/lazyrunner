@@ -454,6 +454,8 @@ class PModule:
         pt = self.__getNewParamTree(name_p, full_ptree, apply_preset)
         return self.manager.getModule(pt, name)
 
+
+
     def __getNewParamTree(name_p, full_ptree, apply_preset):
 
         # First make a copy of the full parameter tree.

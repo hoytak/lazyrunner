@@ -449,7 +449,11 @@ class Manager(object):
 
             if isPModule(name):
                 cls = getPModuleClass(name)
-                cls.preprocessParameters(parameters[name])
+                
+                try:
+                    cls.preprocessParameters(parameters[name])
+                except TypeError:
+                    cls.preprocessParameters(parameters[name], parameters.copy())
                 parameters["__%s__pmodule_version__" % name] = cls._getVersion()
                 
             parameters.freeze(name)
