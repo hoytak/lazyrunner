@@ -437,7 +437,7 @@ class PModule:
         
         # First make a copy of the full parameter tree.
 
-        pt = self.__getNewParamTree(name_p, full_ptree, apply_preset)
+        pt = self.__getNewParamTree(name, name_p, full_ptree, apply_preset)
         return self.manager.getResults(pt, name)
 
     def getSpecificModule(self, name, name_p = None, full_ptree = None, apply_preset = None):
@@ -451,12 +451,10 @@ class PModule:
         tree.  
         """
         
-        pt = self.__getNewParamTree(name_p, full_ptree, apply_preset)
+        pt = self.__getNewParamTree(name, name_p, full_ptree, apply_preset)
         return self.manager.getModule(pt, name)
 
-
-
-    def __getNewParamTree(name_p, full_ptree, apply_preset):
+    def __getNewParamTree(self, name, name_p, full_ptree, apply_preset):
 
         # First make a copy of the full parameter tree.
         pt = self.raw_parameters.copy()
