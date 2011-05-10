@@ -186,6 +186,7 @@ def runBuildExt(base_dir, opttree, config):
     extra_library_dirs = ct.extra_library_dirs
     libraries          = ct.libraries
     library_map        = ct.library_map
+    extra_source_map   = ct.extra_source_map
     compiler_args      = ct.compiler_args
     link_args          = ct.link_args
 
@@ -252,6 +253,9 @@ def runBuildExt(base_dir, opttree, config):
         
         return strip_empty(process_lib(lib) for lib in liblist)
 
+    def get_extra_source_files(m):
+        return extra_source_map.get(m, [])
+
     def get_extra_compile_args(m):
         return strip_empty(compiler_args + (['-g'] if config.debug_mode else ["-DNDEBUG"]))
 
@@ -270,7 +274,7 @@ def runBuildExt(base_dir, opttree, config):
 
         ext_modules.append(Extension(
             modname,
-            [f], 
+            [f] + get_extra_source_files(modname), 
             include_dirs = get_include_dirs(modname),
             library_dirs = get_library_dirs(modname),
             libraries = get_libraries(modname),
