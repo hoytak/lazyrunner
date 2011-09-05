@@ -1,4 +1,4 @@
-from cPickle import loads, dumps
+from cPickle import loads, dumps, PicklingError
 import h5py
 import os, os.path as osp
 
@@ -31,6 +31,7 @@ def loadTreeDictFromGroup(g):
     p = TreeDict(n)
 
     for k, ds in g.iteritems():
+        k = str(k)
         if not k.startswith("@"):
             p[k] = loadObjectFromGroup(g, k)
 
@@ -71,17 +72,27 @@ def saveObjectToGroup(g, key, v, force_pickling = False):
     else:
         try:
             save_v = dumps(v, protocol=-1)
-        except Exception, e:
-            print "Dumping key '%s'; ERROR! " % key
+        except PicklingError, e:
+            print "ERROR: Dumping key '%s': " % key,
             print str(e)
+            return
 
-    if not force_pickling :
+            
+    if not force_pickling:
         try:
-            g.create_dataset(key, data=save_v, compression='lzf')
+            try:
+                g.create_dataset(key, data=save_v, compression='lzf')
+            except TypeError:
+                g.create_dataset(key, data=save_v)
+                
         except Exception:
             saveObjectToGroup(g, key, v, force_pickling = True)
+            
     else:
-        g.create_dataset(key, data=save_v, compression='lzf')
+        try:
+            g.create_dataset(key, data=save_v, compression='lzf')
+        except TypeError:
+            g.create_dataset(key, data=save_v)
         
 def loadObjectFromGroup(g, key):
     
@@ -91,7 +102,7 @@ def loadObjectFromGroup(g, key):
         raise IOError(("Error retrieving treedict from group %s:\n" % g.name)
                           + str(e))
     
-    if type(v) is str:
+    if isinstance(v, basestring):
         return loads(v)
     else:
         return v
