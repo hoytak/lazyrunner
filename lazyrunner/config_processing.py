@@ -212,6 +212,7 @@ def loadConfigInformation(base_dir, opttree):
     set_and_check_type("cython.libraries",   [], list)
     set_and_check_value("cython.numpy_needed", True, is_boolean)
     set_and_check_type("cython.library_map", {}, dict)
+    set_and_check_type("cython.extra_source_map", {}, dict)
 
     for k, v in cp.cython.library_map.items():
         if k.endswith(".pyx"):

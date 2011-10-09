@@ -680,6 +680,9 @@ def printPresetHelpList(n_list = None):
 
     full_width = _getTerminalSize()[1]
 
+    if full_width == 0:
+        full_width = 120
+
     name_width = 25 #max(int(full_width / 3), 30)
 
     def printBlock(item_list, prefix="", width = None):
