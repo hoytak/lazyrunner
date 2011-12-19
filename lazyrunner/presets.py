@@ -451,6 +451,7 @@ class _PresetWrapper:
                     raise TypeError("Incorrect type in apply list.")
 
         if self.branch is not None:
+            ptree.makeBranch(self.branch, False)
             ptree = ptree[self.branch]
             if type(ptree) is not TreeDict:
                 raise TypeError("Requested branch '%' for preset '%s' not a branch."
