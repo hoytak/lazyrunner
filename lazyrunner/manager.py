@@ -38,6 +38,7 @@ class Manager(object):
 
         # Set up the lookups 
         self.local_cache = {}
+        self.current_result_keys = {}
         self.current_modules = {}
 	self.current_bare_modules = {}
 	self.reported_results = set()
@@ -334,6 +335,17 @@ class Manager(object):
 
         self.local_cache[(key, obj_name)] = obj
 
+        #if we don't do this, we can run out of memory on a lot of things
+        if obj_name == "results":
+            if obj_name in self.current_result_keys: 
+                try:
+                    del self.local_cache[self.current_result_keys[obj_name]]
+                except KeyError:
+                    pass
+            
+            self.current_result_keys[obj_name] = (key, obj_name)
+        
+
         if (not self.use_disk_cache or self.disk_cache_read_only):
             return
 
@@ -354,6 +366,25 @@ class Manager(object):
                 os.remove(filename)
             except Exception:
                 pass
+
+    def purgeLocalCache(self, name = None):
+        """
+        Purges some results from the cache in hopes of reducing memory
+        consumption. If `name` is None, then all the locally cached objects are purged.
+        """
+
+        if name is None:
+            self.log.info("Emptying local cache.")
+            self.local_cache = {}
+            
+        else:
+            self.log.info("Purging %s from local cache." % name)
+           
+            purge_keys = [ k for k in self.local_cache.iterkeys() if k[1] == name]
+
+            for k in purge_keys:
+                del self.local_cache[k]
+
 
     ##################################################
     # Cache database stuff
