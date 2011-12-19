@@ -385,6 +385,13 @@ class Manager(object):
             for k in purge_keys:
                 del self.local_cache[k]
 
+    def purgeInactiveModules(self):
+        """
+        Purges inactive modules from the cache in hopes of reducing memory
+        consumption. 
+        """
+
+        self.current_modules = {}
 
     ##################################################
     # Cache database stuff

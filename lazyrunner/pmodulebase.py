@@ -460,13 +460,13 @@ class PModule:
         pt = self.raw_parameters.copy()
 
         if full_ptree is not None:
-            pt.update(full_ptree)
+            pt.update(full_ptree, protect_structure=False)
 
         name = name.lower()
 
         if name_p is not None:
             pt.makeBranch(name)
-            pt[name].update(name_p)
+            pt[name].update(name_p, protect_structure=False)
 
         if apply_preset is not None:
             if type(apply_preset) is str:
