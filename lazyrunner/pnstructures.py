@@ -54,6 +54,8 @@ class Delta(_PNSpecBase):
         return self.load_name
 
 
+################################################################################
+
 class PNodeModuleCache(object):
 
     def __init__(self):
@@ -70,6 +72,10 @@ class PNodeCommon(object):
     def __init__(self, manager):
         self.manager = manager
 
+
+        # holds weak refs to all the common module caches
+
+        # This assumes that 
         self.module_common = {}
 
         # Holds common objects
@@ -116,7 +122,7 @@ class PNodeCommon(object):
         if m_cache.access_count == 0:
             del self.module_common[pn.name]
 
-        
+    def saveToModuleCache    
     
     
 
@@ -160,6 +166,12 @@ class PNode(object):
         self.results = None
         self.module = None
         self.child_pull_dict = {}
+
+        self.cache_dep_all = {}
+        self.cache_dep_local = self.common.getCache(self, True, False)
+        self.cache_dep_dep_dependencies = self.common.getCache(self, False, True)
+        self.cache_dep_module = self.common.getCache(self, False, False)
+
 
     def instantiateChildren(self):
 
