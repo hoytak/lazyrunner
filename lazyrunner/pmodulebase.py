@@ -34,28 +34,20 @@ class PModule:
         return local_parameters
 
     @classmethod
-    def _getDependencySet(cls, manager, parameters, dep_type):
+    def _getDependencySet(cls, parameters, dep_type):
         
         assert dep_type in ["result", "module", "parameter"]
-
-        # Get the dependency set that this one builds on
-        if dep_type == "parameter":
-            dep_set = cls._getDependencySet(manager, parameters, "result") | set([cls._name])
-        elif dep_type == "result":
-            dep_set = cls._getDependencySet(manager, parameters, "module")
-        else:
-            dep_set = set()
 
         # Get the precise dependencies 
         dep_attr = dep_type + '_dependencies'
 
         def process_dependency(dl):
-            if type(dl) is str:
-                s = set([dl])
+            if type(dl) is str or isinstance(dl, _PNSpecBase):
+                s = [dl]
             elif type(dl) in [list, tuple, set]:
-                s = set(dl)
+                s = list(dl)
             elif dl is None:
-                s = set()
+                s = []
             else:
                 raise TypeError("'%s' dependency type '%s' for module '%s' not understood"
                                 % (dep_type, str(type(dl)), cls._name))
@@ -66,19 +58,20 @@ class PModule:
             dependency_function = getattr(cls, dep_attr)
 
             if type(dependency_function) in [list, tuple, set, str]:
-                dep_set |= process_dependency(dependency_function)
-            else:
+                return process_dependency(dependency_function)
+
+            try:
+                return process_dependency(dependency_function())
+            
+            except TypeError:
+                pb = parameters[self.name]
+
                 try:
-                    dep_set |= process_dependency(dependency_function())
+                    return process_dependency(dependency_function(pb))
                 except TypeError:
-                    pb =  manager.getPreprocessedBranch(parameters, cls.name().lower())
-                    
-                    try:
-                        dep_set |= process_dependency(dependency_function(pb))
-                    except TypeError:
-                        dep_set |= process_dependency(dependency_function(pb, parameters))
-                        
-        return dep_set
+                    return process_dependency(dependency_function(pb, parameters))
+        else:
+            return []
 
     @classmethod
     def _getVersion(cls):

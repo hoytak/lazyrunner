@@ -38,242 +38,253 @@ class Manager(object):
 
         # Set up the lookups 
         self.local_cache = {}
-        self.current_result_keys = {}
-        self.current_modules = {}
-	self.current_bare_modules = {}
-	self.reported_results = set()
 	self.debug_logged_dependencies = set()
-        self.parameter_branch_hash_cache = {}
 
-        self.common_objects = {}
-	
+
+
+    def run(self, final_modules = None):
+
+        # Init all the common pools
+
+        
+
+
+
+
+
     ##################################################
-    # Interface functions to the outside
+    # Interactions with the PNode structures
 
-    def getResults(self, parameters, name = None):
-        """
-        The main method for getting results from the outside.  If
-        these results are already present, then they are returned as is.
-        """
-
-        # make sure that all the flags are removed from the parameter
-        # tree; things should be reprocessed here.
-        parameters.attach(recursive = True)
-        parameters = parameters.copy()
+        def _buildPNodeTree(self)
 
 
-        if name is None or type(name) in [list, tuple, set]:
-            if name is None:
-                
-                name = parameters.get("run_queue", [])
+        ##################################################
+        # Interface functions to the outside
 
-                if type(name) is str:
-                    name = [name]
+        def getResults(self, parameters, name = None):
+            """
+            The main method for getting results from the outside.  If
+            these results are already present, then they are returned as is.
+            """
 
-                self.log.debug("Results requested for modules %s, from run_queue." % (", ".join(name)))
+            # make sure that all the flags are removed from the parameter
+            # tree; things should be reprocessed here.
+            parameters.attach(recursive = True)
+            parameters = parameters.copy()
+
+
+            if name is None or type(name) in [list, tuple, set]:
+                if name is None:
+
+                    name = parameters.get("run_queue", [])
+
+                    if type(name) is str:
+                        name = [name]
+
+                    self.log.debug("Results requested for modules %s, from run_queue." % (", ".join(name)))
+                else:
+                    self.log.debug("Results requested for modules %s." % (", ".join(name)))
+
+                r = TreeDict("results")
+
+                # important to have copy of run_queue here!
+                for n in [nn.lower() for nn in name]:
+                    if n not in r:
+                        r[n] = self._getResults(parameters, n)
+
+                r.freeze()
+
+                return r
+
+            elif type(name) is str:
+                self.log.debug("Results requested for module '%s'" % name)
+                return self._getResults(parameters, name.lower())
+
             else:
-                self.log.debug("Results requested for modules %s." % (", ".join(name)))
+                raise TypeError("'%s' not a valid type for name parameter." % str(type(name)))
 
-            r = TreeDict("results")
+        def _getResults(self, parameters, name, key = None, module_instance = None):
 
-            # important to have copy of run_queue here!
-            for n in [nn.lower() for nn in name]:
-                if n not in r:
-		    r[n] = self._getResults(parameters, n)
+            assert type(name) is str
+            name = name.lower()
 
-            r.freeze()
+            self.log.debug("Retriveing results for module '%s'" % name)
+
+            # Get the hash of this module
+            if key is None:
+                key = self._getModuleKey(parameters, name)
+
+            if self.inCache(key, "results"):
+                r = self.loadFromCache(key, "results")
+                self.__reportResults(parameters, name, key, r)
+
+            else:
+                self.log.debug("Getting results for %s" % name)
+
+                if module_instance is None:
+                    module_instance, r = self._getModule(parameters, name, key=key, calling_from_getresults = True)
+                else:
+                    self.log.info("Running %s" % name)
+                    r = module_instance.run()
+
+                if r is None:
+                    r = TreeDict()
+                    r.freeze()
+                else:
+                    r.freeze()
+
+                self.saveToCache(key, "results", r)
+                self.__reportResults(parameters, name, key, r)
 
             return r
-        
-        elif type(name) is str:
-            self.log.debug("Results requested for module '%s'" % name)
-            return self._getResults(parameters, name.lower())
 
-        else:
-            raise TypeError("'%s' not a valid type for name parameter." % str(type(name)))
+        def getModule(self, parameters, name):
+            """
+            Returns a given module of that type.  
+            """
 
-    def _getResults(self, parameters, name, key = None, module_instance = None):
+            return self._getModule(parameters.copy(), name.lower())
 
-        assert type(name) is str
-        name = name.lower()
-        
-        self.log.debug("Retriveing results for module '%s'" % name)
-            
-        # Get the hash of this module
-        if key is None:
-            key = self._getModuleKey(parameters, name)
+        def _getModule(self, parameters, name, key = None, calling_from_getresults = False):
 
-        if self.inCache(key, "results"):
-            r = self.loadFromCache(key, "results")
-	    self.__reportResults(parameters, name, key, r)
-	    
-        else:
-            self.log.debug("Getting results for %s" % name)
-            
-            if module_instance is None:
-                module_instance, r = self._getModule(parameters, name, key=key, calling_from_getresults = True)
-	    else:
-                self.log.info("Running %s" % name)
-		r = module_instance.run()
+            # Only save one module of each to keep the memory use down
 
-            if r is None:
-                r = TreeDict()
-		r.freeze()
-	    else:
-		r.freeze()
+            self.log.debug("Retrieving module %s" % name)
 
-            self.saveToCache(key, "results", r)
-            self.__reportResults(parameters, name, key, r)
-            
-        return r
+            if key is None:
+                key = self._getModuleKey(parameters, name)
 
-    def getModule(self, parameters, name):
-        """
-        Returns a given module of that type.  
-        """
+            m = None
 
-        return self._getModule(parameters.copy(), name.lower())
+            if name in self.current_modules:
+                cur_key, cur_m = self.current_modules[name]
 
-    def _getModule(self, parameters, name, key = None, calling_from_getresults = False):
+                if cur_key == key:
+                    m = cur_m
 
-        # Only save one module of each to keep the memory use down
+            if m is None:
+                self.log.debug("Instantiating module %s" % name)
+                m = getPModuleClass(name)(self, key, parameters, True)
 
-        self.log.debug("Retrieving module %s" % name)
+            assert m._name == name, "m._name <- %s != %s -> name" % (m._name, name)
 
-        if key is None:
-            key = self._getModuleKey(parameters, name)
+            self.current_modules[name] = (key, m)
 
-        m = None
+            r = self._getResults(parameters, name, key, module_instance = m)
 
-        if name in self.current_modules:
-            cur_key, cur_m = self.current_modules[name]
+            # Give it the local results
+            m.local_results = r
 
-            if cur_key == key:
-                m = cur_m
-                
-        if m is None:
-            self.log.debug("Instantiating module %s" % name)
-            m = getPModuleClass(name)(self, key, parameters, True)
+            # If we're calling from getResults, return r along with m
+            if calling_from_getresults:
+                return m, r
+            else:
+                return m
 
-        assert m._name == name, "m._name <- %s != %s -> name" % (m._name, name)
-        
-        self.current_modules[name] = (key, m)
+        def _getModuleKey(self, parameters, name):
 
-        r = self._getResults(parameters, name, key, module_instance = m)
+            def getHashDependencySet(n):
 
-        # Give it the local results
-        m.local_results = r
+                pmc = getPModuleClass(n)
+                pdep_set = pmc._getDependencySet(self, parameters, "parameter")
 
-	# If we're calling from getResults, return r along with m
-	if calling_from_getresults:
-	    return m, r
-	else:
-	    return m
+                for d in (pmc._getDependencySet(self, parameters, "result")
+                          | pmc._getDependencySet(self, parameters, "module") ):
 
-    def _getModuleKey(self, parameters, name):
+                    if d != n:
+                        pdep_set |= getHashDependencySet(d)
 
-        def getHashDependencySet(n):
-            
-            pmc = getPModuleClass(n)
-            pdep_set = pmc._getDependencySet(self, parameters, "parameter")
+                pdep_set_string = ', '.join(sorted(pdep_set))
 
-            for d in (pmc._getDependencySet(self, parameters, "result")
-                      | pmc._getDependencySet(self, parameters, "module") ):
-                
-                if d != n:
-                    pdep_set |= getHashDependencySet(d)
+                if ("parameter", n, pdep_set_string) not in self.debug_logged_dependencies:
+                    self.log.debug("Parameter dependencies for %s are %s" % (n, pdep_set_string))
+                    self.debug_logged_dependencies.add( ("parameter", n, pdep_set_string) )
 
-	    pdep_set_string = ', '.join(sorted(pdep_set))
+                return pdep_set
 
-	    if ("parameter", n, pdep_set_string) not in self.debug_logged_dependencies:
-		self.log.debug("Parameter dependencies for %s are %s" % (n, pdep_set_string))
-		self.debug_logged_dependencies.add( ("parameter", n, pdep_set_string) )
+            d_set = sorted(getHashDependencySet(name))
 
-            return pdep_set
-        
-        d_set = sorted(getHashDependencySet(name))
+            dep_td = TreeDict()
 
-        dep_td = TreeDict()
+            d_set_str = ', '.join(d_set)
 
-	d_set_str = ', '.join(d_set)
+            if ("hash", name, d_set_str) not in self.debug_logged_dependencies:
+                self.log.debug("Hash Dependency set for %s is %s" % (name, d_set_str))
+                self.debug_logged_dependencies.add( ("hash", name, d_set_str) )
 
-	if ("hash", name, d_set_str) not in self.debug_logged_dependencies:
-	    self.log.debug("Hash Dependency set for %s is %s" % (name, d_set_str))
-	    self.debug_logged_dependencies.add( ("hash", name, d_set_str) )
+            # Set the dependency hash
+            for d in d_set:
+                if d != name:
+                    dep_td[d] = self.getPreprocessedBranch(parameters, d, return_hash = True)[1]
 
-        # Set the dependency hash
-        for d in d_set:
-            if d != name:
-                dep_td[d] = self.getPreprocessedBranch(parameters, d, return_hash = True)[1]
+            dep_hash = dep_td.hash()
 
-        dep_hash = dep_td.hash()
-        
-        # Now set the local hash
-        local_branch, local_hash = self.getPreprocessedBranch(parameters, name, return_hash = True)
+            # Now set the local hash
+            local_branch, local_hash = self.getPreprocessedBranch(parameters, name, return_hash = True)
 
-        # if type(local_branch) is TreeDict:
-        #     print "\n+++++++++++++ %s ++++++++++++++++" % name
-        #     print local_branch.makeReport()
-        #     print "+++++++++++++++++++++++++++++"
-                    
-        return (name, local_hash, dep_hash)
+            # if type(local_branch) is TreeDict:
+            #     print "\n+++++++++++++ %s ++++++++++++++++" % name
+            #     print local_branch.makeReport()
+            #     print "+++++++++++++++++++++++++++++"
 
-    def __reportResults(self, parameters, name, key, r):
-	
-	if (name, key) in self.reported_results:
-	    return
+            return (name, local_hash, dep_hash)
 
-	self.log.debug("Reporting results for module %s, key = %s" % (name, key))
+        def __reportResults(self, parameters, name, key, r):
 
-        p = self.getPreprocessedBranch(parameters, name)
+            if (name, key) in self.reported_results:
+                return
 
-        try:
-            getPModuleClass(name).reportResults(parameters, p, r)
-        except TypeError, te:
+            self.log.debug("Reporting results for module %s, key = %s" % (name, key))
 
-            rrf = getPModuleClass(name).reportResults
+            p = self.getPreprocessedBranch(parameters, name)
 
-            def raiseTypeError():
-                raise TypeError(("reportResults method in '%s' must be @classmethod "
-                                "and take global parameter tree, local parameter tree, "
-                                "and result tree as arguments.") % name)
-
-            # See if it was due to incompatable signature
             try:
-                from inspect import getcallargs
-            except ImportError:
-                if "reportResults" in str(te):
+                getPModuleClass(name).reportResults(parameters, p, r)
+            except TypeError, te:
+
+                rrf = getPModuleClass(name).reportResults
+
+                def raiseTypeError():
+                    raise TypeError(("reportResults method in '%s' must be @classmethod "
+                                    "and take global parameter tree, local parameter tree, "
+                                    "and result tree as arguments.") % name)
+
+                # See if it was due to incompatable signature
+                try:
+                    from inspect import getcallargs
+                except ImportError:
+                    if "reportResults" in str(te):
+                        raiseTypeError()
+                    else:
+                        raise te
+
+                try:
+                    getcallargs(rrf, parameters, p, r)
+                except TypeError:
                     raiseTypeError()
-                else:
-                    raise te
 
-            try:
-                getcallargs(rrf, parameters, p, r)
-            except TypeError:
-                raiseTypeError()
-                
-            # Well, that wasn't the issue, so it's something internal; re-raise
-            raise
-        
-	self.reported_results.add( (name, key) )
+                # Well, that wasn't the issue, so it's something internal; re-raise
+                raise
 
-    ##################################################
-    # Cache file stuff
+            self.reported_results.add( (name, key) )
 
-    def __resultCachingEnabled(self, name):
+        ##################################################
+        # Cache file stuff
 
-        cls = getPModuleClass(name)
-        
-        if hasattr(cls, 'disable_result_caching') and getattr(cls, 'disable_result_caching'):
-            return False
-        else:
-            return True
+        def __resultCachingEnabled(self, name):
 
-    def inCache(self, key, obj_name, local_key_override=None, dependency_key_override=None):
-        """
-        Returns true if the given object is present in the cache and
-        False otherwise.  
-        """
+            cls = getPModuleClass(name)
+
+            if hasattr(cls, 'disable_result_caching') and getattr(cls, 'disable_result_caching'):
+                return False
+            else:
+                return True
+
+        def inCache(self, key, obj_name, local_key_override=None, dependency_key_override=None):
+            """
+            Returns true if the given object is present in the cache and
+            False otherwise.  
+            """
 
         key = self.__processKey(key, local_key_override, dependency_key_override)
 
@@ -367,32 +378,6 @@ class Manager(object):
             except Exception:
                 pass
 
-    def purgeLocalCache(self, name = None):
-        """
-        Purges some results from the cache in hopes of reducing memory
-        consumption. If `name` is None, then all the locally cached objects are purged.
-        """
-
-        if name is None:
-            self.log.info("Emptying local cache.")
-            self.local_cache = {}
-            
-        else:
-            self.log.info("Purging %s from local cache." % name)
-           
-            purge_keys = [ k for k in self.local_cache.iterkeys() if k[1] == name]
-
-            for k in purge_keys:
-                del self.local_cache[k]
-
-    def purgeInactiveModules(self):
-        """
-        Purges inactive modules from the cache in hopes of reducing memory
-        consumption. 
-        """
-
-        self.current_modules = {}
-
     ##################################################
     # Cache database stuff
 
@@ -470,38 +455,6 @@ class Manager(object):
 
         return osp.join(directory, "-".join(key[1:]) + suffix)
 
-    def getPreprocessedBranch(self, parameters, name, return_hash = False):
-        """
-        Runs the parameters in a particular branch through the
-        preprocessor and then freezes the tree / returns the
-        associated hash.
-        """
-
-        if name not in parameters:
-            parameters.makeBranch(name)
-
-        try:
-            br_hash = self.parameter_branch_hash_cache[(id(parameters), name)] 
-
-        except KeyError:
-
-            if isPModule(name):
-                cls = getPModuleClass(name)
-                
-                try:
-                    cls.preprocessParameters(parameters[name])
-                except TypeError:
-                    cls.preprocessParameters(parameters[name], parameters.copy())
-                parameters["__%s__pmodule_version__" % name] = cls._getVersion()
-                
-            parameters.freeze(name)
-            br_hash = self.parameter_branch_hash_cache[(id(parameters), name)] = parameters.hash(name)
-
-        if return_hash:
-            return parameters[name], br_hash
-        else:
-            return parameters[name]
-
     def inCommonObjectCache(self, name, key):
 
         try:
@@ -532,6 +485,19 @@ class Manager(object):
         name_cd[key] = (persistent, obj)
 
         return obj
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class DBWrapper(object):
     """
