@@ -1,5 +1,8 @@
 from treedict import TreeDict
 from presets import applyPresets
+from collections import defaultdict
+from os.path import join
+
 
 class _PNSpecBase(object):
     pass
@@ -56,15 +59,47 @@ class Delta(_PNSpecBase):
 
 ################################################################################
 
+class PNodeModuleCacheObject(object):
+
+    def __init__(self, pn_name, name, specific_key,
+                 local_key, dependency_key, is_disk_writable = True):
+
+        self.pn_name = pn_name
+        self.name = name
+        self.specific_key = specific_key
+        self.local_key = local_key
+        self.dependency_key = dependency_key
+        self.is_disk_writable = is_disk_writable
+        self.obj = None
+        self.obj_is_loaded = False
+
+    def getFilename(self):
+
+        def v(t):
+            return str(t) if t is not None else "null"
+        
+        return join(v(self.pn_name), v(self.name),
+                    "%s-%s-%s.dat" % (v(self.local_key), v(self.dependency_key),
+                                      v(self.specific_key)) )
+
+    def setObject(self, obj):
+        assert not self.obj_is_loaded
+        self.obj_is_loaded = True
+        self.obj = obj
+        
+    def getObject(self):
+        assert self.obj_is_loaded
+        return self.obj
+
+    def objectIsLoaded(self):
+        return self.obj_is_loaded
+    
+
 class PNodeModuleCache(object):
 
     def __init__(self):
-
-        self.access_count = 1
+        self.access_count = 0
         self.cache = {}
-        
-
-
 
 # This class holds the runtime environment for the pnodes
 class PNodeCommon(object):
@@ -72,17 +107,14 @@ class PNodeCommon(object):
     def __init__(self, manager):
         self.manager = manager
 
-
-        # holds weak refs to all the common module caches
-
-        # This assumes that 
-        self.module_common = {}
-
         # Holds common objects
         self.common_objects = {}
 
         # This is for node filtering, i.e. eliminating duplicates
         self.pnode_lookup = {}
+
+        # This is for cache lootup
+        self.cache_lookup = defaultdict(PNodeModuleCache)
         
     def filterPNode(self, pn):
         
@@ -113,18 +145,27 @@ class PNodeCommon(object):
             self.pnode_lookup[key] = pn
             return pn
 
+    def _getCache(self, pn, use_local, use_dependencies):
+        
+        key = (pn.name if pn is not None else None,
+               pn.local_hash if use_local else None,
+               pn.dependency_hash if use_dependencies else None)
+
+        cache = self.cache_lookup[key]
+
+        cache.reference_count += 1
+            
+        return cache
+    
     def decreaseReference(self, pn):
 
-        m_cache = self.module_common[pn.name]
+        for t in [(None, False, False),
+                  (self, True, False),
+                  (self, False, True),
+                  (self, False, False),
+                  (self, True, True)
 
-        m_cache.access_count -= 1
-
-        if m_cache.access_count == 0:
-            del self.module_common[pn.name]
-
-    def saveToModuleCache    
-    
-    
+    def 
 
 class PNode(object):
 
@@ -167,9 +208,9 @@ class PNode(object):
         self.module = None
         self.child_pull_dict = {}
 
-        self.cache_dep_all = {}
-        self.cache_dep_local = self.common.getCache(self, True, False)
-        self.cache_dep_dep_dependencies = self.common.getCache(self, False, True)
+        self.cache_dep_all = self.common.getCache
+        self.cache_dep_local = self.common.getCache
+        self.cache_dep_dependencies = self.common.getCache
         self.cache_dep_module = self.common.getCache(self, False, False)
 
 
@@ -368,4 +409,5 @@ class PNode(object):
 
         return ret
 
-        
+    ################################################################################
+    # Loading cache stuff
