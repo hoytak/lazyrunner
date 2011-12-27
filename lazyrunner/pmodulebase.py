@@ -98,7 +98,7 @@ class PModule:
         
     ############################################################
     # Now the initializing and running functions
-    def __init__(self, manager, key, parameters, setup_module):
+    def __init__(self, pnode, parameters, results, modules):
 
         name = self._name
         

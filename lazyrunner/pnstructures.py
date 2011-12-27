@@ -58,42 +58,59 @@ class Delta(_PNSpecBase):
 
 
 ################################################################################
+# Stuff to manage the cache
 
-class PNodeModuleCacheObject(object):
+class PNodeModuleCacheContainer(object):
 
-    def __init__(self, pn_name, name, specific_key,
-                 local_key, dependency_key, is_disk_writable = True):
+    def __init__(self, pn_name, name, 
+                 local_key, dependency_key,
+                 specific_key = None,
+                 is_disk_writable = True):
 
-        self.pn_name = pn_name
-        self.name = name
-        self.specific_key = specific_key
-        self.local_key = local_key
-        self.dependency_key = dependency_key
-        self.is_disk_writable = is_disk_writable
-        self.obj = None
-        self.obj_is_loaded = False
+        self.__pn_name = pn_name
+        self.__name = name
+        self.__specific_key = specific_key
+        self.__local_key = local_key
+        self.__dependency_key = dependency_key
+        self.__is_disk_writable = is_disk_writable
+        self.__obj = None
+        self.__obj_is_loaded = False
+        self.__disk_save_hook = None
 
     def getFilename(self):
 
         def v(t):
             return str(t) if t is not None else "null"
         
-        return join(v(self.pn_name), v(self.name),
-                    "%s-%s-%s.dat" % (v(self.local_key), v(self.dependency_key),
-                                      v(self.specific_key)) )
+        return join(v(self.__pn_name), v(self.__name),
+                    "%s-%s-%s.dat" % (v(self.__local_key), v(self.__dependency_key),
+                                      v(self.__specific_key)) )
+
+    def getCacheKey(self):
+        # The specific cache
+        return (self.__pn_name, self.__local_key, self.__dependency_key)
+
+    def getObjectKey(self):
+        return (self.__name, self.__specific_key)
 
     def setObject(self, obj):
-        assert not self.obj_is_loaded
-        self.obj_is_loaded = True
-        self.obj = obj
-        
+        assert not self.__obj_is_loaded
+        self.__obj_is_loaded = True
+        self.__obj = obj
+
+        if self.__disk_save_hook is not None:
+            self.__disk_save_hook(self)
+
+    def setObjectSaveHook(self, hook):
+        self.__disk_save_hook = hook        
+    
     def getObject(self):
-        assert self.obj_is_loaded
-        return self.obj
+        assert self.__obj_is_loaded
+        return self.__obj
 
     def objectIsLoaded(self):
-        return self.obj_is_loaded
-    
+        return self.__obj_is_loaded
+
 
 class PNodeModuleCache(object):
 
@@ -148,24 +165,57 @@ class PNodeCommon(object):
     def _getCache(self, pn, use_local, use_dependencies):
         
         key = (pn.name if pn is not None else None,
-               pn.local_hash if use_local else None,
+               pn.local_key if use_local else None,
                pn.dependency_hash if use_dependencies else None)
 
-        cache = self.cache_lookup[key]
+        return self.cache_lookup[key]
 
-        cache.reference_count += 1
-            
-        return cache
-    
+    def increaseReference(self, pn):
+
+        for t in [(None, False, False),
+                  (pn, True, False),
+                  (pn, False, True),
+                  (pn, False, False),
+                  (pn, True, True)]:
+
+            cache = self._getCache(*t)
+            cache.reference_count += 1
+
     def decreaseReference(self, pn):
 
         for t in [(None, False, False),
                   (self, True, False),
                   (self, False, True),
                   (self, False, False),
-                  (self, True, True)
+                  (self, True, True)]:
+            
+            cache = self._getCache(*t)
+            cache.reference_count -= 1
 
-    def 
+            assert cache.reference_count >= 0
+
+            # Clear the cache if it's no longer needed
+            if cache.reference_count == 0:
+                cache.cache = {}
+
+    def attemptLoadContainer(self, container):
+
+        assert not container.objectIsLoaded()
+
+        cache = self.cache_lookup[container.getCacheKey()].cache
+
+        obj_key = container.getObjectKey()
+
+        if obj_key in cache:
+            container.setObject(cache[obj_key].getObject())
+            return
+        
+        else:
+            cache[obj_key] = container
+
+        # now see if it can be loaded from disk
+        self.manager.loadFromDisk(container)
+
 
 class PNode(object):
 
@@ -198,20 +248,16 @@ class PNode(object):
             h.update(str(p_class._getVersion))
             h.update(self.parameters.hash(name))
 
-            self.local_hash = base64.b64encode(h.digest(), "az")[:8]
+            self.local_key = base64.b64encode(h.digest(), "az")[:8]
             
         else:
-            self.local_hash = self.parameters.hash(name)
+            self.local_key = self.parameters.hash(name)
 
         self.reference_count = 1
-        self.results = None
         self.module = None
+        self.results_container = None
+        self.results_reported = False
         self.child_pull_dict = {}
-
-        self.cache_dep_all = self.common.getCache
-        self.cache_dep_local = self.common.getCache
-        self.cache_dep_dependencies = self.common.getCache
-        self.cache_dep_module = self.common.getCache(self, False, False)
 
 
     def instantiateChildren(self):
@@ -258,7 +304,7 @@ class PNode(object):
 
         self.dependency_hash = base64.b64encode(h.digest(), "az")[:8]
 
-        h.update(self.local_hash)
+        h.update(self.local_key)
         
         self.key = base64.b64encode(h.digest(), "az")[:8]
 
@@ -276,7 +322,7 @@ class PNode(object):
                 pn = PNode(self.manager, parameters, s, p_type)
 
                 n = name_override if name_override is not None else pn.name
-                rs[(s, pn.local_hash)] = (n if first_order else None, pn)
+                rs[(s, pn.local_key)] = (n if first_order else None, pn)
                 
             elif t is list or t is tuple or t is set:
                 for se in s:
@@ -292,16 +338,35 @@ class PNode(object):
 
         return ret
 
-    def _loadModule(self, attempt_to_load_results = True):
+    def _loadResults(self):
+        # returns True on success, otherwise need to go with _instanciateModuleAndResults
+        
+        if self.results_container is None:
+            self.results_container = PNodeModuleCacheContainer(
+                pn_name = self.name,
+                name = "__results__",
+                local_key = self.local_key,
+                dependency_key = self.dependency_key)
 
-        assert self.module is None
+        if not self.results_container.objectIsLoaded():
+            self.common.attemptLoadContainer(self.results_container)
 
-        if attempt_to_load_results:
-            have_results = self._loadResults(False)
+        return self.results_container.objectIsLoaded()
+
+    def _instanciateModuleAndResults(self):
+
+        if self.module is not None:
+            assert self.results_container is not None
+            return
+
+        if self.results_container is None:
+            have_loaded_results = self._loadResults()
+        else:
+            have_loaded_results = self.results_container.objectIsLoaded()
 
         m_class = getPModuleClass(self.name)
 
-        # Create the dependency trees
+        # Create the dependency parts
         self.child_pull_dict = {}
 
         modules = TreeDict()
@@ -326,35 +391,48 @@ class PNode(object):
                 params[load_name] = p = pn.pullParameters()
                 self.child_pull_dict[k] = (p, None, None)
 
-
         # Now instantiate the module
-        self.module = m = m_class(self, params, results, modules)
+        self.module = m = self.p_class(self, params, results, modules)
 
-        if self.results is None:
-            self.results = m.run()
-            self.manager.saveToCache(vvv)
-                          
-    def _loadResults(self, calling_from_loadmodule = False):
+        if not have_loaded_results:
+            r = m.run()
+            self.results_container.setObject(r)
 
-        assert self.results is None
-
-        is_loaded, self.results = self.manager.loadResultsFromCache(self.name, self.key)
-
-        if not is_loaded:
-
-            if calling_from_loadmodule:
-                return False
-            else:
-                self.loadModule(attempt_to_load_results = False)
-        else:
-            if not calling_from_loadmodule:
-                self._doReferencePull()
-                
-            
-        assert self.results is not None
-
-        return True
+        m._setResults(r) 
         
+    def _reportResults(self, results):
+
+        if not self.results_reported:
+
+            try:
+                self.p_class.reportResults(self.parameters, self.parameters[self.name], results)
+            except TypeError, te:
+
+                rrf = self.p_class.reportResults
+
+                def raiseTypeError():
+                    raise TypeError(("reportResults method in '%s' must be @classmethod "
+                                    "and take global parameter tree, local parameter tree, "
+                                    "and result tree as arguments.") % name)
+
+                # See if it was due to incompatable signature
+                try:
+                    from inspect import getcallargs
+                except ImportError:
+                    if "reportResults" in str(te):
+                        raiseTypeError()
+                    else:
+                        raise te
+
+                try:
+                    getcallargs(rrf, parameters, p, r)
+                except TypeError:
+                    raiseTypeError()
+
+                # Well, that wasn't the issue, so it's something internal; re-raise
+                raise
+
+        self.results_reported = True
 
     ##################################################
     # Interfacing stuff
@@ -366,7 +444,7 @@ class PNode(object):
 
         # Don't need these any more
         if self.reference_count == 0:
-            self.results = None
+            self.results_container = None
             self.module = None
             self.common.decreaseReference(self)
             self.child_pull_dict = {}
@@ -387,10 +465,16 @@ class PNode(object):
 
         assert self.p_type in ["module", "results"]
 
-        if self.results is None:
-            self.results = self._loadResults()
+        if self.results_container is None:
+            success = self._loadResults()
+            if not success:
+                self._instanciateModuleAndResults()
 
-        ret = (self.parameters[self.name], self.results)
+        r = self.results_container.getObject()
+
+        self._reportResults(r)
+
+        ret = (self.parameters[self.name], r)
 
         self._decreaseReferenceCount()
 
@@ -401,9 +485,13 @@ class PNode(object):
         assert self.p_type == "module"
 
         if self.module is None:
-            self._loadModule()
+            self._instanciateModuleAndResults()
 
-        ret = (self.parameters[self.name], self.results, self.module)
+        r = self.results_container.getObject()
+        
+        self._reportResults(r)
+
+        ret = (self.parameters[self.name], r, self.module)
 
         self._decreaseReferenceCount()
 
