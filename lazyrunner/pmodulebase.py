@@ -95,58 +95,38 @@ class PModule:
         """
         
         return logging.getLogger(cls._name)
+
+    @classmethod
+    def _allowsResultCaching(self):
+        return not (hasattr(self, "disable_results_caching")
+                    and self.disable_results_caching)
         
+    @classmethod
+    def _allowsCaching(self):
+        return not (hasattr(self, "disable_caching")
+                    and self.disable_caching)
+
+    def _setResults(self, r):
+        self.local_results = r
+
     ############################################################
     # Now the initializing and running functions
     def __init__(self, pnode, parameters, results, modules):
 
         name = self._name
         
-        self.manager = manager
+        self._pnode = pnode
 
-        # Set the name of the local class
-        self.__key = key
-
-        self.log = self._getLogger()
-	
 	if setup_module:
 	    self.log.info('Initializing Module %s.' % self._name)
 
-        self.parameters = TreeDict()
-        self.raw_parameters = parameters.copy()
-        self.raw_parameters.attach(recursive = True)
+        self.parameters = parameters
+        self.p = parameters
+        self.results = results
+        self.modules = modules
 
-        name = self._name
-
-        self.p = self.manager.getPreprocessedBranch(parameters, name)
-        self.parameters[name] = self.p
-
-        for p_branch in self._getDependencySet(manager, parameters, 'parameter'):
-            self.parameters[p_branch] = self.manager.getPreprocessedBranch(parameters, p_branch)
-
-        self.parameters.freeze()
-
-        if setup_module:
-            # self.results contains the results of all the modules
-            # requested as dependencies.
-
-            self.results = TreeDict('results')
-        
-            for r in self._getDependencySet(manager, parameters, 'result'):
-                self.results[r] = self.manager._getResults(parameters, r)
-
-            self.results.freeze()
-
-            # Instantiate dependent modules
-            self.modules = TreeDict('modules')
-
-            for m in self._getDependencySet(manager, parameters, 'module'):
-                self.modules[m] = self.manager._getModule(parameters, m)
-
-            self.modules.freeze()
-
-            # Now, call the per-class setup method
-            self.setup()
+        # Now, call the per-class setup method
+        self.setup()
 
     # The setup function; in case it's not needed
     def setup(self):
@@ -233,20 +213,57 @@ class PModule:
 
 	return t.hash()
 
-    def __processKey(self, obj_name, key):
-
-        if type(obj_name) is not str:
-            raise TypeError("`obj_name` must be a string.")
+    def _cacheAction(self, action,
+                     obj_name, key,
+                     ignore_module,
+                     ignore_local,
+                     ignore_dependencies,
+                     is_disk_writable,
+                     creation_function = None,
+                     obj = None):
 
         if key is not None:
-            if type(key) is str and _key_processing_re(key) is not None:
-                return obj_name + key
-            else:
-                return obj_name + TreeDict(key = key).hash()
-        else:
-            return obj_name
+            key = TreeDict(key = key).hash()
 
-    def inCache(self, obj_name, key = None, ignore_local = False, ignore_dependencies = False):
+        d_key = (obj_name, key, ignore_module, ignore_local, ignore_dependencies)
+
+        try:
+            container = self.container_map[d_key]
+        except KeyError:
+            container = self.container_map[d_key] = self._pnode.getCacheContainer(
+                obj_name, key, ignore_module, ignore_local,
+                ignore_dependencies, is_disk_writable)
+
+        if not is_disk_writable:
+            container.disableDiskWriting()
+
+        if action == "query":
+            return container.objectIsLoaded()
+        elif action == "load":
+            if not container.objectIsLoaded():
+                if creation_function is None:
+                    raise RuntimeError(
+                        "creation_function must be supplied if the "
+                        "object is not available in the cache.")
+                
+                container.setObject(creation_function())
+                
+            return container.getObject()
+        
+        elif action == "save":
+            container.setObject(obj)
+
+        elif action == "key":
+            return container.getKeyAsString()
+        
+        else:
+            assert False
+
+    def inCache(self, obj_name, key = None,
+                ignore_module = False,
+                ignore_local = False,
+                ignore_dependencies = False,
+                is_disk_writable = True):
         """
         Returns True if an object with key `obj_name` can be loaded
         from cache and False otherwise.
@@ -257,6 +274,11 @@ class PModule:
         dependencies on parameters.  It can be almost any python
         object (the TreeDict hash() function is used to generate the
         hash).
+        
+        If `ignore_module` is True, then the specific module is
+        ignored when caching the object.  This can be used for sharing
+        objects between modules (when the existing dependency system
+        is inadequate).
 
         If `ignore_local` is True, then the local branch of the
         central parameter tree is ignored in calculating the
@@ -275,17 +297,18 @@ class PModule:
         branch and is independent of the results of dependent modules,
         then it can be stored and loaded from cache more frequently by
         specifying ``ignore_dependencies=True``).
-        
+     
         """
 
-        name = self.__processKey(obj_name, key)
-        local_key_override = ("IGN" if ignore_local else None)
-        dependency_key_override = ("IGN" if ignore_dependencies else None)
-        
-        return self.manager.inCache(self.__key, name, local_key_override, dependency_key_override)
-                                    
-    def loadFromCache(self, obj_name, key = None, ignore_local = False,
-                      ignore_dependencies = False, creation_function = None):
+        return self._cacheAction("query", obj_name, key, ignore_module,
+                                 ignore_local, ignore_dependencies, is_disk_writable)
+                                        
+    def loadFromCache(self, obj_name, key = None,
+                      ignore_module = False,
+                      ignore_local = False,
+                      ignore_dependencies = False,
+                      is_disk_writable = True,
+                      creation_function = None):
         """
         Loads the specific object from the cache if available.  If it
         is not available, a RuntimeError is raised.
@@ -296,6 +319,11 @@ class PModule:
         dependencies on parameters.  It can be almost any python
         object (the TreeDict hash() function is used to generate the
         hash).
+
+        If `ignore_module` is True, then the specific module is
+        ignored when caching the object.  This can be used for sharing
+        objects between modules (when the existing dependency system
+        is inadequate).
 
         If `ignore_local` is True, then the local branch of the
         central parameter tree is ignored in calculating the
@@ -330,33 +358,19 @@ class PModule:
                   return [None]*self.p.list_length
 
               L = self.loadFromCache(\"listobj\", creation_function = create_listobj)
-        
+              
         """
 
-        name = self.__processKey(obj_name, key)
+        return self._cacheAction("load", obj_name, key, ignore_module,
+            ignore_local, ignore_dependencies, is_disk_writable,
+            creation_function = creation_function)
         
-        self.log.debug("Trying to load %s from cache." % name)
-        
-        local_key_override = ("IGN" if ignore_local else None)
-        dependency_key_override = ("IGN" if ignore_dependencies else None)
-
-        if (creation_function is not None
-            and not self.manager.inCache(self.__key, name,
-                local_key_override, dependency_key_override)):
-
-            self.log.debug("%s not in cache; creating." % name)
-
-            obj = creation_function()
-            self.manager.saveToCache(self.__key, name, obj,
-                                     local_key_override, dependency_key_override)
-            return obj
-        
-        return self.manager.loadFromCache(self.__key, name,
-            local_key_override, dependency_key_override)
-        
-        
-
-    def saveToCache(self, obj_name, obj, key = None, ignore_local = False, ignore_dependencies = False):
+    def saveToCache(self, obj_name, obj,
+                    key = None,
+                    ignore_module = False,
+                    ignore_local = False,
+                    ignore_dependencies = False,
+                    is_disk_writable = True):
         """
         Caches the specific object `obj` in the local cache.
 
@@ -366,6 +380,11 @@ class PModule:
         dependencies on parameters.  It can be almost any python
         object (the TreeDict hash() function is used to generate the
         hash).
+
+        If `ignore_module` is True, then the specific module is
+        ignored when caching the object.  This can be used for sharing
+        objects between modules (when the existing dependency system
+        is inadequate).
 
         If `ignore_local` is True, then the local branch of the
         central parameter tree is ignored in calculating the
@@ -387,156 +406,38 @@ class PModule:
         more frequently by specifying ``ignore_dependencies=True``).
         """
 
+        return self._cacheAction("save", obj_name, key, ignore_module,
+            ignore_local, ignore_dependencies, is_disk_writable, obj=obj)
 
-        name = self.__processKey(obj_name, key)
-
-        self.log.debug("Saving object '%s' to cache" % name)
-
-        self.manager.saveToCache(self.__key, name, obj,
-                                 local_key_override = ("IGN" if ignore_local else None),
-                                 dependency_key_override = ("IGN" if ignore_dependencies else None))
-                                 
-
-    def getSpecificResults(self, name, name_p = None, full_ptree = None, apply_preset = None):
-        """
-        Returns the results from p-module `name`, with the parameters
-        local to `name` being given (possibly in part) by `name_p`.
-
-        For example, if `p.mypmodule.a = 1` was given in the default
-        parameter settings, specifying `mypmodule` in the result
-        dependencies would cause `self.results.mypmodule` to hold the
-        results from mypmodule run with `a = 1`.  However, suppose the
-        results from mypmodule with `a = 2` were required.  Then calling::
-
-          self.getSpecificResults('mypmodule', TreeDict(a = 2) )
-
-        would return those results.  
-
-        All the parameters present in the default parameter tree but
-        not present in the given one are imported from the default.
-        Thus it is only necessary to specify modified parameters.
-
-        If additional parts of the `ptree` need to be changed from the
-        default, they can be specified using `full_p`.  This has the
-        same behavior as `name_p`, except that modifications are
-        specified from the root of the parameter tree rather than the
-        branch associated with `name`.
-
-        Alternatively, presets to be applied to the full parameter
-        tree may be passed in using `apply_preset`.  `apply_preset`,
-        if given, must be a single preset name or a list of valid
-        preset names.  If a list, they are applied in order.
-        """
-        
-        # First make a copy of the full parameter tree.
-
-        pt = self.__getNewParamTree(name, name_p, full_ptree, apply_preset)
-        return self.manager.getResults(pt, name)
-
-    def getSpecificModule(self, name, name_p = None, full_ptree = None, apply_preset = None):
-        """
-        Returns a p-module `name` instantiated from the parameters
-        given.  These parameters are specified in the same way as
-        :meth:`getSpecificResults`, with `name_p` giving an update to
-        the p-module's local branch and `full_ptree` giving an update
-        to the global parameter tree.  If `apply_preset` is given, a
-        preset or list of presets are applied to the global parameter
-        tree.  
-        """
-        
-        pt = self.__getNewParamTree(name, name_p, full_ptree, apply_preset)
-        return self.manager.getModule(pt, name)
-
-    def __getNewParamTree(self, name, name_p, full_ptree, apply_preset):
-
-        # First make a copy of the full parameter tree.
-        pt = self.raw_parameters.copy()
-
-        if full_ptree is not None:
-            pt.update(full_ptree, protect_structure=False)
-
-        name = name.lower()
-
-        if name_p is not None:
-            pt.makeBranch(name)
-            pt[name].update(name_p, protect_structure=False)
-
-        if apply_preset is not None:
-            if type(apply_preset) is str:
-                applyPreset(pt, apply_preset)
-            elif type(apply_preset) is list or type(apply_preset) is tuple:
-                applyPreset(pt, *apply_preset)
-            else:
-                raise TypeError("apply_preset must be either string, list, or tuple (not %s)"
-                                % str(type(apply_preset)))
-        pt.run_queue = []
-
-        return pt
-
-
-    def getCommonObject(self, name, key = None, creation_function = None,
-                        obj = None, persistent = True):
-        """
-        Returns a common object, such as a processing object/class,
-        that can be shared between parts of the program.  This object
-        is not cached to disk, but can be shared in common between
-        parts of the program.  An example could be an external solver
-        that is setup the same across problem instances, but run in
-        different ways across several methods.
-
-        Note that the key here does not depend on any aspect of the
-        parameter tree except possibly through the user specified
-        `key`.  If `key` is None, it is taken to be the local key of
-        the processing module (see :ref:`key`).
-
-        If `creation_function` is given, it is called to create the
-        object if it is not found in the common lookup table.
-        Alternately, if `object` is given, then this object is
-        inserted into the common lookups if it is not already present.
-
-        If `persistent` is False (default True), then the object is
-        deleted once another object with the same name is requested.
-        """
-
-        if key is None:
-            key = self.key()
-
-        if self.manager.inCommonObjectCache(name, key):
-            return self.manager.getCommonObject(name, key)
-        
-        else:
-            return self.manager.saveToCommonObjectCache(
-                name, key, obj, persistent, creation_function)
-
-    def key(self, ignore_local=False, ignore_dependencies=False):
+    def key(self, obj_name = None,
+            key = None,
+            ignore_module = False,
+            ignore_local = False,
+            ignore_dependencies = False):
         """
         Returns a unique string representing the state of the current
-        processing module.  This string is a deterministic hash of the
-        parameters, possibly including dependencies, for the
-        processing module.  It's intended to be used for obtaining a
-        key for use in methods such as :ref:`getCommonObject`.
+        processing module or a certain object.  This string is a
+        deterministic hash of the parameters, possibly including
+        dependencies, for the processing module.  
 
-        `ignore_dependencies` and `ignore_local` are handled in ways
-        identical to the caching functions.
         """
 
-        local_key_override = ("IGN" if ignore_local else None)
-        dependency_key_override = ("IGN" if ignore_dependencies else None)
-
-        return self.manager._getKeyAsString(
-            self.__key, local_key_override, dependency_key_override)
-
-    def getAxisProxy(self):
+        return self._cacheAction("key", "__null__" if obj_name is None else obj_name,
+                                 key, ignore_module, ignore_local,
+                                 ignore_dependencies, True)
+        
+    def getResults(self, r):
         """
-        This method provides a way for users to generate matplotlib
-        plots without matplotlib being present.  It returns an
-        AxisProxy object which behaves exactly like a axis object from
-        matplotlib.  The difference is that it simply records all the
-        commands.
-
-        When the AxisProxy method saveAsScript() is called, it writes
-        a python script file that, when run in an environment with
-        matplotlib present, will generate the original plot.
+        Returns the results from 
         """
 
-        return AxisProxy()
+        return self._pnode.getSpecific("results", r)
+
+    def getModule(self, m):
+        """
+
+        """
+
+        return self._pnode.getSpecific("module", m)
+
+    
