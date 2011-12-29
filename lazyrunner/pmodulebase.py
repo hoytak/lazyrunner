@@ -118,9 +118,10 @@ class PModule:
 
     @classmethod
     def _allowsResultCaching(self):
-        return not (hasattr(self, "disable_results_caching")
+        return not ((hasattr(self, "disable_results_caching")
                     and self.disable_results_caching)
-        
+                    or (hasattr(self, "disable_result_caching")
+                        and self.disable_result_caching))
     @classmethod
     def _allowsCaching(self):
         return not (hasattr(self, "disable_caching")

@@ -5,7 +5,7 @@ A class that manages a batch of sessions.
 import time, logging, sys
 from diskio import *
 from os import makedirs, remove
-from os.path import join, expanduser, exists, split
+from os.path import join, expanduser, exists, split, abspath
 from treedict import TreeDict
 from pnstructures import PNodeCommon, PNode
         
@@ -86,9 +86,14 @@ class Manager(object):
 
     def _loadFromDisk(self, container):
 
+        if not container.isDiskWritable():
+            return
+
         if self.disk_read_enabled:
-            filename = join(self.cache_directory, container.getFilename())
-         
+            filename = abspath(join(self.cache_directory, container.getFilename()))
+
+            self.log.debug("Trying to load %s from %s" % (container.getKeyAsString(), filename))
+
             if exists(filename):
                 try:
                     pt = loadResults(filename)
@@ -99,6 +104,8 @@ class Manager(object):
                     
                 if pt is not None:
 
+                    self.log.debug("--> Object successfully loaded.")
+    
                     if (pt.treeName() == "__ValueWrapper__"
                         and pt.size() == 1
                         and "value" in pt):
@@ -108,36 +115,40 @@ class Manager(object):
                         container.setObject(pt)
                         
                     return
+            else:
+                self.log.debug("--> File does not exist.")
 
-        if self.disk_write_enabled:
+        if self.disk_write_enabled and container.isDiskWritable():
             container.setObjectSaveHook(self._saveToDisk)
 
-
     def _saveToDisk(self, container):
+
+        assert self.disk_write_enabled and container.isDiskWritable()
+
+        filename = join(self.cache_directory, container.getFilename())
+        directory = split(filename)[0]
+        obj = container.getObject()
+
+        self.log.debug("Saving object  %s to   %s." % (container.getKeyAsString(), filename))
+
+            # Make sure it exists
+        if not exists(directory):
+            makedirs(directory)
+
+        if type(obj) is not TreeDict:
+            pt = TreeDict("__ValueWrapper__", value = obj)
+        else:
+            pt = obj
+
+        try:
+            saveResults(filename, pt)
+
+            assert exists(filename)
             
-        if self.disk_write_enabled:
-
-            filename = join(self.cache_directory, container.getFilename())
-            directory = split(filename)[0]
-            obj = container.getObject()
-
-                # Make sure it exists
-            if not exists(directory):
-                makedirs(directory)
-
-            if type(obj) is not TreeDict:
-                pt = TreeDict("__ValueWrapper__")
-                pt.value = obj
-            else:
-                pt = obj
+        except Exception, e:
+            self.log.error("Exception raised attempting to save object to cache: \n%s" % str(e))
 
             try:
-                saveResults(filename, pt)
-            except Exception, e:
-                self.log.error("Exception raised attempting to save object to cache: \n%s" % str(e))
-
-                try:
-                    remove(filename)
-                except Exception:
-                    pass
-
+                remove(filename)
+            except Exception:
+                pass

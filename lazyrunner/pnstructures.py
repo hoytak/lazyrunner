@@ -154,7 +154,8 @@ class PNodeModuleCacheContainer(object):
         self.__is_disk_writable = False
         self.__disk_save_hook = None
          
-
+    def isDiskWritable(self):
+        return self.__is_disk_writable
 
 class PNodeModuleCache(object):
 
@@ -228,10 +229,10 @@ class PNodeCommon(object):
     def decreaseReference(self, pn):
 
         for t in [(None, False, False),
-                  (self, True, False),
-                  (self, False, True),
-                  (self, False, False),
-                  (self, True, True)]:
+                  (pn, True, False),
+                  (pn, False, True),
+                  (pn, False, False),
+                  (pn, True, True)]:
             
             cache = self._getCache(*t)
             cache.reference_count -= 1
@@ -327,7 +328,7 @@ class PNode(object):
                 self.local_key = self.parameters.hash(name)
             else:
                 h = hashlib.md5()
-                h.update(str(p_class._getVersion))
+                h.update(str(p_class._getVersion()))
                 h.update(self.parameters.hash(name))
                 self.local_key = base64.b64encode(h.digest(), "az")[:8]
 
@@ -446,35 +447,33 @@ class PNode(object):
 
         return rs
 
-    def _loadResults(self):
-        # returns True on success, otherwise need to go with _instanciateModuleAndResults
-        
-        if self.results_container is None:
-            self.results_container = PNodeModuleCacheContainer(
+    def _instantiate(self):
+
+        # Are we done?
+        if self.results_container is not None:
+            assert self.module is not None or (self.p_type != "module")
+            return
+
+        need_module = (self.p_type == "module")
+
+        # Attempt to load the results from cache
+        self.results_container = self.common.loadContainer(
+            PNodeModuleCacheContainer(
                 pn_name = self.name,
                 name = "__results__",
                 local_key = self.local_key,
                 dependency_key = self.dependency_key,
-                is_disk_writable = self.is_disk_writable and self.p_class._allowsResultCaching())
+                is_disk_writable = self.is_disk_writable and self.p_class._allowsResultCaching()))
 
-        if not self.results_container.objectIsLoaded():
-            self.results_container = self.common.loadContainer(self.results_container)
 
-        return self.results_container.objectIsLoaded()
+        have_loaded_results = self.results_container.objectIsLoaded()
 
-    def _instanciateModuleAndResults(self):
-
-        if self.module is not None:
-            assert self.results_container is not None
+        # we're done if the results are loaded and that's all we need    
+        if have_loaded_results and not need_module:
             return
 
-        if self.results_container is None:
-            have_loaded_results = self._loadResults()
-        else:
-            have_loaded_results = self.results_container.objectIsLoaded()
-
-        m_class = getPModuleClass(self.name)
-
+        # Okay, not done yet
+        
         # Create the dependency parts
         self.child_pull_dict = {}
         global _Null
@@ -507,9 +506,7 @@ class PNode(object):
         params.freeze()
 
         # Now instantiate the module
-        self.module = m = self.p_class(self, params, results, modules)
-        self.module_alive = True
-        self.module_weak_reference = weakref.ref(m, callback = _PNodeModuleDereferencer(self))
+        m = self.p_class(self, params, results, modules)
 
         if not have_loaded_results:
             r = m.run()
@@ -518,6 +515,11 @@ class PNode(object):
             self.results_container.setObject(r)
 
         m._setResults(self.results_container.getObject())
+
+        if need_module:
+            self.module = m
+            self.module_alive = True
+            self.module_weak_reference = weakref.ref(m, callback = _PNodeModuleDereferencer(self))
         
     def _reportResults(self, results):
 
@@ -596,9 +598,7 @@ class PNode(object):
         assert self.p_type in ["module", "results"]
 
         if self.results_container is None:
-            success = self._loadResults()
-            if not success:
-                self._instanciateModuleAndResults()
+            self._instantiate()
 
         r = self.results_container.getObject()
 
@@ -615,7 +615,7 @@ class PNode(object):
         assert self.p_type == "module"
 
         if self.module is None:
-            self._instanciateModuleAndResults()
+            self._instantiate()
 
         r = self.results_container.getObject()
         
