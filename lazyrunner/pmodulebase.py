@@ -4,6 +4,7 @@ from treedict import TreeDict
 from pmodulelookup import getPModuleClass, isPModule
 import re
 from presets import applyPreset
+from pnstructures import _PNSpecBase
 
 _key_processing_re = re.compile('[0-9a-zA-Z_]+').match
 
@@ -34,44 +35,63 @@ class PModule:
         return local_parameters
 
     @classmethod
-    def _getDependencySet(cls, parameters, dep_type):
+    def _getDependencies(cls, parameters):
         
-        assert dep_type in ["result", "module", "parameter"]
+        def getDep(dep_type):
 
-        # Get the precise dependencies 
-        dep_attr = dep_type + '_dependencies'
+            # Get the precise dependencies 
+            dep_attr = dep_type + '_dependencies'
 
-        def process_dependency(dl):
-            if type(dl) is str or isinstance(dl, _PNSpecBase):
-                s = [dl]
-            elif type(dl) in [list, tuple, set]:
-                s = list(dl)
-            elif dl is None:
-                s = []
-            else:
-                raise TypeError("'%s' dependency type '%s' for module '%s' not understood"
-                                % (dep_type, str(type(dl)), cls._name))
+            def process_dependency(dl):
+                def wrong_type(s):
+                    raise TypeError("'%s' dependency type '%s' for module '%s' not understood"
+                                    % (dep_type, str(type(s)), cls._name))
+                
+                def clean(s):
+                    if type(s) is str:
+                        return s.strip().lower()
+                    elif not isinstance(s, _PNSpecBase):
+                        wrong_type(s)
+                    return s
+                    
+                if type(dl) is str or isinstance(dl, _PNSpecBase):
+                    s = [dl]
+                elif type(dl) in [list, tuple, set]:
+                    s = list(dl)
+                elif dl is None:
+                    s = []
+                else:
+                    wrong_type(s)
+                    
+                s = [clean(se) for se in s]
 
-            return set(n.strip() for n in s if len(n.strip()) != 0)
+                return [se for se in s if len(se) != 0]
 
-        if hasattr(cls, dep_attr):
-            dependency_function = getattr(cls, dep_attr)
+            if hasattr(cls, dep_attr):
+                dependency_function = getattr(cls, dep_attr)
 
-            if type(dependency_function) in [list, tuple, set, str]:
-                return process_dependency(dependency_function)
-
-            try:
-                return process_dependency(dependency_function())
-            
-            except TypeError:
-                pb = parameters[self.name]
+                if type(dependency_function) in [list, tuple, set, str]:
+                    return process_dependency(dependency_function)
 
                 try:
-                    return process_dependency(dependency_function(pb))
+                    return process_dependency(dependency_function())
+
                 except TypeError:
-                    return process_dependency(dependency_function(pb, parameters))
-        else:
-            return []
+                    pb = parameters[cls._name]
+
+                    try:
+                        return process_dependency(dependency_function(pb))
+                    except TypeError:
+                        return process_dependency(dependency_function(pb, parameters))
+            else:
+                return []
+
+        mod_dep = getDep("module")
+        res_dep = getDep("result")
+        par_dep = getDep("parameter")
+
+        return (mod_dep, res_dep, par_dep)
+        
 
     @classmethod
     def _getVersion(cls):
@@ -117,13 +137,14 @@ class PModule:
         
         self._pnode = pnode
 
-	if setup_module:
-	    self.log.info('Initializing Module %s.' % self._name)
+        self.log.info('Initializing Module %s.' % self._name)
 
         self.parameters = parameters
-        self.p = parameters
+        self.p = parameters[self._name]
         self.results = results
         self.modules = modules
+
+        self.__container_map = {}
 
         # Now, call the per-class setup method
         self.setup()
@@ -228,9 +249,9 @@ class PModule:
         d_key = (obj_name, key, ignore_module, ignore_local, ignore_dependencies)
 
         try:
-            container = self.container_map[d_key]
+            container = self.__container_map[d_key]
         except KeyError:
-            container = self.container_map[d_key] = self._pnode.getCacheContainer(
+            container = self.__container_map[d_key] = self._pnode.getCacheContainer(
                 obj_name, key, ignore_module, ignore_local,
                 ignore_dependencies, is_disk_writable)
 

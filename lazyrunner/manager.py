@@ -4,7 +4,8 @@ A class that manages a batch of sessions.
 
 import time, logging, sys
 from diskio import *
-import os, os.path as osp
+from os import makedirs, remove
+from os.path import join, expanduser, exists, split
 from treedict import TreeDict
 from pnstructures import PNodeCommon, PNode
         
@@ -28,7 +29,7 @@ class Manager(object):
             
             self.log.info("Using cache directory '%s'" % mp.cache_directory)
 
-            self.cache_directory = osp.expanduser(mp.cache_directory)
+            self.cache_directory = expanduser(mp.cache_directory)
             self.disk_read_enabled = True
             self.disk_write_enabled = not mp.cache_read_only
         else:
@@ -83,7 +84,7 @@ class Manager(object):
 
         return ret
 
-    def _loadFromCache(self, container):
+    def _loadFromDisk(self, container):
 
         if self.disk_read_enabled:
             filename = join(self.cache_directory, container.getFilename())
@@ -109,19 +110,20 @@ class Manager(object):
                     return
 
         if self.disk_write_enabled:
-            container.setObjectSaveHook(self._saveToCache)
+            container.setObjectSaveHook(self._saveToDisk)
 
 
-    def _saveToCache(self, container):
+    def _saveToDisk(self, container):
             
         if self.disk_write_enabled:
 
             filename = join(self.cache_directory, container.getFilename())
             directory = split(filename)[0]
+            obj = container.getObject()
 
                 # Make sure it exists
-            if not osp.exists(directory):
-                os.makedirs(directory)
+            if not exists(directory):
+                makedirs(directory)
 
             if type(obj) is not TreeDict:
                 pt = TreeDict("__ValueWrapper__")
@@ -135,7 +137,7 @@ class Manager(object):
                 self.log.error("Exception raised attempting to save object to cache: \n%s" % str(e))
 
                 try:
-                    os.remove(filename)
+                    remove(filename)
                 except Exception:
                     pass
 

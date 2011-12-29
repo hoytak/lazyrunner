@@ -1,8 +1,9 @@
 from treedict import TreeDict
-from presets import applyPresets
+from presets import applyPreset
 from collections import defaultdict
 from os.path import join
 from pmodulelookup import *
+import hashlib, base64, weakref
 
 class _PNSpecBase(object):
     pass
@@ -18,7 +19,6 @@ class Direct(_PNSpecBase):
     def _getLoadName(self):
         return self.name
     
-
 class Delta(_PNSpecBase):
     """
     Encodes a change to the current parameter tree and some
@@ -26,7 +26,7 @@ class Delta(_PNSpecBase):
 
     `Delta` is initialized with 1 required parameter and 4 optional
     parameters.  `p_name` is required and gives the module name of the
-    results or module requested.  `local_delta` is a TreeDict instance
+    results or module requested.  `local_delta` is a TreeDict instanc   e
     that is applied to the parameter tree branch of the parameter tree
     corresponding to the requested dependency.  All the parameters
     present in the default parameter tree but not present in the given
@@ -54,7 +54,7 @@ class Delta(_PNSpecBase):
  
     def __init__(self, p_name, local_delta = None, delta = None, apply_preset = None, name = None):
 
-        self.name = p_name.lower()
+        self.name = p_name.lower().strip()
         self.local_delta = local_delta
         self.delta = delta
         self.apply_preset = apply_preset
@@ -159,7 +159,7 @@ class PNodeModuleCacheContainer(object):
 class PNodeModuleCache(object):
 
     def __init__(self):
-        self.access_count = 0
+        self.reference_count = 0
         self.cache = {}
 
 # This class holds the runtime environment for the pnodes
@@ -182,15 +182,15 @@ class PNodeCommon(object):
         # also do all the registering
         is_module = ( pn.p_type == "module" )
 
-        try:
-            self.module_common[pn.name].access_count += 1
-        except KeyError:
-            self.module_common[pn.name] = PNodeModuleCache()
-
         # see if it's a duplicate
         key = (pn.name, pn.key)
 
+        print ("%s requested, name = %s, key = %s, local_key = %s, dep_key = %s"
+               % (pn.p_type, pn.name, pn.key, pn.local_key, pn.dependency_key))
+
         if key in self.pnode_lookup:
+
+            print
 
             pnf = self.pnode_lookup[key]
 
@@ -210,7 +210,7 @@ class PNodeCommon(object):
         
         key = (pn.name if pn is not None else None,
                pn.local_key if use_local else None,
-               pn.dependency_hash if use_dependencies else None)
+               pn.dependency_key if use_dependencies else None)
 
         return self.cache_lookup[key]
 
@@ -261,18 +261,29 @@ class PNodeCommon(object):
         return container
 
     def _debug_referencesDone(self):
+        import gc
+        gc.collect()
+
         for pn in self.pnode_lookup.itervalues():
             assert pn.reference_count == 0, pn.reference_count
 
-        for t in [(None, False, False),
-                  (self, True, False),
-                  (self, False, True),
-                  (self, False, False),
-                  (self, True, True)]:
-            
-            cache = self._getCache(*t)
-            assert cache.reference_count == 0, cache.reference_count
+            for t in [(None, False, False),
+                      (pn, True, False),
+                      (pn, False, True),
+                      (pn, False, False),
+                      (pn, True, True)]:
 
+                cache = self._getCache(*t)
+                assert cache.reference_count == 0, cache.reference_count
+
+class _PNodeModuleDereferencer(object):
+    def __init__(self, pnode):
+        self.pnode = pnode
+
+    def __call__(self, *args):
+        self.pnode._moduleDestroyed()
+
+_Null = "null"
 
 class PNode(object):
 
@@ -292,7 +303,7 @@ class PNode(object):
                 raise ValueError("%s is not a recognized processing module." % name)
         else:
             if p_type != "parameters":
-                raise ValueError("p_type must be either 'module', 'results', or 'parameters'.")
+                raise ValueError("p_type must be either 'module', 'results', or 'parameters' (not '%s')." % p_type)
 
         ##################################################
         # Get the preprocessed parameters
@@ -312,20 +323,23 @@ class PNode(object):
             if p is not None:
                 self.parameters[name] = p
 
-            h = hashlib.md5()
-            h.update(str(p_class._getVersion))
-            h.update(self.parameters.hash(name))
+            if self.p_type == "parameters":
+                self.local_key = self.parameters.hash(name)
+            else:
+                h = hashlib.md5()
+                h.update(str(p_class._getVersion))
+                h.update(self.parameters.hash(name))
+                self.local_key = base64.b64encode(h.digest(), "az")[:8]
 
-            self.local_key = base64.b64encode(h.digest(), "az")[:8]
-
-            self.is_disk_writable = p_type._allowsCaching()
+            self.is_disk_writable = p_class._allowsCaching()
             
         else:
             self.local_key = self.parameters.hash(name)
             self.is_disk_writable = False
 
-        self.full_hash = self.parameters.hash()
+        self.full_key = self.parameters.hash()
         self.reference_count = 1
+        self.module_alive = False
         self.module = None
         self.results_container = None
         self.results_reported = False
@@ -336,7 +350,8 @@ class PNode(object):
         # This extra step is needed as the child pnodes must be
         # consolidated into the right levels first
 
-        if not self.is_pmodule:
+        if self.p_type == "parameters":
+            self.key = self.local_key
             return
 
         # get the verbatim children specifications and lists of
@@ -345,16 +360,16 @@ class PNode(object):
 
         # these are (name, hash) : pnode dicts
         self.module_dependencies = self._processDependencySet("module", m_dep)
-        self.result_dependencies = self._processDependencySet("result", r_dep)
-        self.parameter_dependencies = self._processDependencySet("parameter", p_dep)
+        self.result_dependencies = self._processDependencySet("results", r_dep)
+        self.parameter_dependencies = self._processDependencySet("parameters", p_dep)
 
         # Now go through and push the dependencies down
         self.result_dependencies.update(self.module_dependencies)
         self.parameter_dependencies.update(self.result_dependencies)
 
         # Go through and instantiate all the children
-        for n, pn in self.result_dependencies.itervalues():
-            pn.instantiateChildren()
+        for n, pn in self.parameter_dependencies.itervalues():
+            pn.initialize()
 
         # Now go through and eliminate duplicates
         for k, (n, pn) in self.result_dependencies.items():
@@ -371,15 +386,27 @@ class PNode(object):
         # computing the hash as well
         h = hashlib.md5()
 
-        for n, th in sorted(self.parameter_dependencies.iterkeys()):
-            h.update(n)
-            h.update(th)
-        
-        for (n, th), (ln, pn) in sorted(self.result_dependencies.iteritems()):
+        print "#"*30
+        print "For dependencies of", self.name
+
+        print "parameters"
+
+        for (n, th), (ln, pn) in sorted(self.parameter_dependencies.iteritems()):
+            print n, th
+
             h.update(n)
             h.update(pn.key)
 
-        self.dependency_hash = base64.b64encode(h.digest(), "az")[:8]
+        print "results"
+        
+        for (n, th), (ln, pn) in sorted(self.result_dependencies.iteritems()):
+
+            print n, pn.key
+            
+            h.update(n)
+            h.update(pn.key)
+
+        self.dependency_key = base64.b64encode(h.digest(), "az")[:8]
 
         h.update(self.local_key)
         
@@ -396,13 +423,15 @@ class PNode(object):
             t = type(s)
 
             if t is str:
-                pn = PNode(self.common, parameters, s, p_type)
+                if s != self.name:
 
-                n = name_override if name_override is not None else pn.name
+                    pn = PNode(self.common, parameters, s, p_type)
 
-                h = self.full_hash if parameters is self.parameters else parameters.hash()
-                
-                rs[(s, h)] = (n if first_order else None, pn)
+                    n = name_override if name_override is not None else pn.name
+
+                    h = self.full_key if parameters is self.parameters else parameters.hash()
+
+                    rs[(s, h)] = (n if first_order else None, pn)
                 
             elif t is list or t is tuple or t is set:
                 for se in s:
@@ -410,7 +439,6 @@ class PNode(object):
 
             elif isinstance(s, _PNSpecBase):
                 add(s.name, s._getParameters(parameters), False, s._getLoadName())
-                
             else:
                 raise TypeError("Dependency type not recognized.")
 
@@ -427,7 +455,7 @@ class PNode(object):
                 name = "__results__",
                 local_key = self.local_key,
                 dependency_key = self.dependency_key,
-                is_disk_writable = self.is_disk_writable and self.p_type._allowsResultCaching())
+                is_disk_writable = self.is_disk_writable and self.p_class._allowsResultCaching())
 
         if not self.results_container.objectIsLoaded():
             self.results_container = self.common.loadContainer(self.results_container)
@@ -449,34 +477,39 @@ class PNode(object):
 
         # Create the dependency parts
         self.child_pull_dict = {}
+        global _Null
 
         modules = TreeDict()
+        results = TreeDict()
+        params = TreeDict()
+
         for k, (load_name, pn) in self.module_dependencies.iteritems():
             params[load_name], results[load_name], modules[load_name] = \
                                self.child_pull_dict[k] = pn.pullUpToModule()
         modules.freeze()
 
-        results = TreeDict()
         for k, (load_name, pn) in self.result_dependencies.iteritems():
             if k in self.child_pull_dict:
                 params[load_name], results[load_name], junk = self.child_pull_dict[k]
             else:
                 params[load_name], results[load_name] = p, r = pn.pullUpToResults()
-                self.child_pull_dict[k] = (p, r, None)
+                self.child_pull_dict[k] = (p, r, _Null)
         results.freeze()
         
         # parameters are easy
-        params = TreeDict()
         for k, (load_name, pn) in self.parameter_dependencies.iteritems():
             if k in self.child_pull_dict:
                 params[load_name] = self.child_pull_dict[k][0]
             else:
                 params[load_name] = p = pn.pullParameters()
-                self.child_pull_dict[k] = (p, None, None)
+                self.child_pull_dict[k] = (p, _Null, _Null)
+        params[self.name] = self.parameters[self.name]
         params.freeze()
 
         # Now instantiate the module
         self.module = m = self.p_class(self, params, results, modules)
+        self.module_alive = True
+        self.module_weak_reference = weakref.ref(m, callback = _PNodeModuleDereferencer(self))
 
         if not have_loaded_results:
             r = m.run()
@@ -532,8 +565,19 @@ class PNode(object):
         if self.reference_count == 0:
             self.results_container = None
             self.module = None
-            self.common.decreaseReference(self)
-            self.child_pull_dict = {}
+
+            if not self.module_alive:
+                self._clearModuleDependencies()
+
+    def _moduleDestroyed(self):
+        self.module_alive = False
+
+        if self.reference_count == 0:
+            self._clearModuleDependencies()
+
+    def _clearModuleDependencies(self):
+        self.common.decreaseReference(self)
+        self.child_pull_dict = {}
 
     def _doReferencePull(self):
         # Needed if we can load the results from cache, as nodes down
@@ -579,6 +623,7 @@ class PNode(object):
 
         ret = (self.parameters[self.name], r, self.module)
 
+        # We can't decrease the reference until the module
         self._decreaseReferenceCount()
 
         return ret
@@ -587,10 +632,10 @@ class PNode(object):
     # Loading cache stuff
 
     def getCacheContainer(self, obj_name, key, ignore_module, ignore_local,
-                          ignore_dependencies, is_disk_writable, creation_function):
+                          ignore_dependencies, is_disk_writable):
 
         container = PNodeModuleCacheContainer(
-            pn_name = None if ignore_module else self.pn_name,
+            pn_name = None if ignore_module else self.name,
             name = obj_name,
             local_key = None if ignore_local else self.local_key,
             dependency_key = None if ignore_dependencies else self.dependency_key,
@@ -608,7 +653,7 @@ class PNode(object):
         if type(r) is str:
             name = r
             ptree = self.parameters
-            key = self.full_hash
+            key = self.full_key
             
         elif isinstance(r, _PNSpecBase):
             name = r.name
@@ -624,12 +669,19 @@ class PNode(object):
         if lookup_key in self.child_pull_dict:
             params, results, module = self.child_pull_dict[lookup_key]
 
-            if r_type
+            global _Null
+
+            if r_type == "results" and results is not _Null:
+                return results
+            elif r_type == "module" and module is not _Null:
+                return module
             
         # should return before now if everything is good
         self.p_type.log.warning( ("%s requested (%s) without being specified as "
-                                  "a dependency; possible source of cache corruption.")
-                                 % (r_type, name) )
+                                  "a %s dependency; possible source of cache corruption "
+                                  "if the module result depends on this without "
+                                  "specification in the local parameter branch.")
+                                 % (r_type, name, r_type) )
 
         if r_type == "results":
             return self.manager.getResults(ptree, name)

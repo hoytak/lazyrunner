@@ -111,7 +111,7 @@ def run(base_dir, opttree):
         parameters = getParameterTree(base_dir, opttree, config)
 
         # Now time for business
-        m.getResults(parameters)
+        m.run(parameters)
     except ConfigError, ce:
         
         print "\nAborting due to error in configuration:"
