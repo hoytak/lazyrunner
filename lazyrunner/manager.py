@@ -39,50 +39,17 @@ class Manager(object):
 
     def run(self, parameters, final_modules = None):
 
-        common = PNodeCommon(self)
-
         if final_modules is None:
             final_modules = parameters.run_queue
 
-        for name in final_modules:
-            self._get(parameters, name, "results", common)
-
-        common._debug_referencesDone()
+        return self.getResults(parameters, final_modules)
     
-    def getResults(self, parameters, name):
-
-        return self._get(parameters, name, "results")
-
-    def getModule(self, parameters, name):
-
-        return self._get(parameters, name, "module")
-
-
-    ##################################################
-    # Interactions with the PNode structures
-
-    def _get(self, parameters, name, p_type, common = None):
-
-        if common is None:
-            check = True
-            common = PNodeCommon(self)
-        else:
-            check = False
-
-        pnode = common.getTree(parameters, name, p_type)
-        
-        if p_type == "module":
-            ret = pnode.pullUpToModule()[-1]
-        elif p_type == "results":
-            ret = pnode.pullUpToResults()[-1]
-        else:
-            assert False
-
-        if check:
-            common._debug_referencesDone()
-
-        return ret
-
+    def getResults(self, parameters, names):
+        common = PNodeCommon(self)
+        r = common.getResults(parameters, names)
+        common._debug_referencesDone()
+        return r
+    
     def _loadFromDisk(self, container):
 
         if not container.isDiskWritable():
