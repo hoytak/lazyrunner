@@ -69,8 +69,7 @@ class Manager(object):
         else:
             check = False
 
-        pnode = PNode(common, parameters, name, p_type)
-        pnode.initialize()
+        pnode = common.getTree(parameters, name, p_type)
         
         if p_type == "module":
             ret = pnode.pullUpToModule()[-1]
