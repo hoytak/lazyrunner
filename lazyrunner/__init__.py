@@ -3,5 +3,6 @@ from presets import applyPreset, preset, presetTree, group, \
 
 from pmodulebase import PModule
 from pmodulelookup import pmodule
+from pnstructures import Delta
 
 from api import LazyRunner

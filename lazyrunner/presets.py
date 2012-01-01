@@ -29,6 +29,7 @@ def checkNameValidity(n):
 _preset_lookup = TreeDict('presets')
 _preset_description_lookup = TreeDict('preset_descriptions')
 _preset_keyset = set()
+_preset_lookup_by_id = {}
 
 ################################################################################
 # The current context is largely used by with statements to ensure
@@ -192,7 +193,8 @@ def registerPreset(name, preset, branch = None, description = None,
             
     else:
         # Register it
-        _preset_lookup[preset_tree_name] = _PresetWrapper(name, branch, preset, description, apply)
+        _preset_lookup[preset_tree_name] = pw = _PresetWrapper(name, branch, preset, description, apply)
+        _preset_lookup_by_id[id(preset)] = (preset_tree_name, pw)
         _preset_keyset.add(name.lower())
 
 def registerPrefixDescription(prefix, description, ignore_context = False):
@@ -462,6 +464,10 @@ class _PresetWrapper:
             
         else:
             self.action(ptree)
+
+    def _prependPModuleContext(self, n):
+        self.name = _combine(n, self.name)
+        self.branch = _combine(n, self.branch)
 
 ################################################################################
 # Now, for the with statements, we can use the following:
@@ -848,3 +854,5 @@ def updatePresetCompletionCache(filename):
     f.write(" ".join(allPresets()))
     f.close()
     
+################################################################################
+# Now for going through and

@@ -5,6 +5,7 @@ from pmodulelookup import getPModuleClass, isPModule
 import re
 from presets import applyPreset
 from pnstructures import _PNSpecBase
+from inspect import getargspec
 
 _key_processing_re = re.compile('[0-9a-zA-Z_]+').match
 
@@ -65,7 +66,7 @@ class PModule:
                     
                 s = [clean(se) for se in s]
 
-                return [se for se in s if len(se) != 0]
+                return [se for se in s if se != ""]
 
             if hasattr(cls, dep_attr):
                 dependency_function = getattr(cls, dep_attr)
@@ -73,16 +74,30 @@ class PModule:
                 if type(dependency_function) in [list, tuple, set, str]:
                     return process_dependency(dependency_function)
 
-                try:
-                    return process_dependency(dependency_function())
-
-                except TypeError:
-                    pb = parameters[cls._name]
-
+                deps = None
+                
+                pb = parameters[cls._name]
+                
+                for t in [[], [pb], [pb,parameters]]:
                     try:
-                        return process_dependency(dependency_function(pb))
-                    except TypeError:
-                        return process_dependency(dependency_function(pb, parameters))
+                        deps = dependency_function(*t)
+                        break
+                    except TypeError, te:
+
+                        if dep_attr in str(te):
+                            continue
+                        else:
+                            raise
+
+                if deps is None:
+                    raise TypeError(("%s() must be a string, list, tuple, set or "
+                                     "take either no parameters, the local parameter "
+                                     "tree, ro the local and global parameter trees.")
+                                    % dep_attr)
+
+                
+                return process_dependency(deps)   
+
             else:
                 return []
 
@@ -149,6 +164,12 @@ class PModule:
 
         # Now, call the per-class setup method
         self.setup()
+
+        self.log.debug("Module %s set up." % self._name)
+
+    def __del__(self):
+        self.log.debug("**** Module %s cleaned up. ***" % self._name)
+        
 
     # The setup function; in case it's not needed
     def setup(self):

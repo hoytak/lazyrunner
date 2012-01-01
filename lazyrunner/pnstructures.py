@@ -3,7 +3,10 @@ from presets import applyPreset
 from collections import defaultdict
 from os.path import join
 from pmodulelookup import *
-import hashlib, base64, weakref, sys
+import hashlib, base64, weakref, sys, gc
+
+results_weak_lookup = weakref.WeakValueDictionary()
+tn_counter = 0
 
 class _PNSpecBase(object):
     pass
@@ -48,7 +51,7 @@ class Delta(_PNSpecBase):
     module dependency, then `name` can be given to specify how that
     result can be accessed from the `results` or `modules` attribute
     in a processing module.  For example, specifying ``name = "sol_alt"``
-    for the result dependencies causes these results to show up in
+     for the result dependencies causes these results to show up in
     ``self.results.sol_alt``.
     """
  
@@ -140,7 +143,7 @@ class PNodeModuleCacheContainer(object):
             self.__disk_save_hook(self)
 
     def setObjectSaveHook(self, hook):
-        self.__disk_save_hook = hook        
+        self.__disk_save_hook = hook
     
     def getObject(self):
         assert self.__obj_is_loaded
@@ -168,11 +171,8 @@ class PNodeCommon(object):
     def __init__(self, manager):
         self.manager = manager
 
-        # Holds common objects
-        self.common_objects = {}
-
         # This is for node filtering, i.e. eliminating duplicates
-        self.pnode_lookup = {}
+        self.pnode_lookup = weakref.WeakValueDictionary()
 
         # This is for cache lootup
         self.cache_lookup = defaultdict(PNodeModuleCache)
@@ -190,11 +190,48 @@ class PNodeCommon(object):
             return pn
         
         if type(names) is str:
-            return getPN(names).pullUpToResults()[-1]
+            r = getPN(names).pullUpToResults()[-1]
         elif type(names) in [list, tuple]:
-            return [getPN(n).pullUpToResults()[-1] for n in names]
+            r = [getPN(n).pullUpToResults()[-1] for n in names]
         else:
             raise TypeError("Names must be a string or list/tuple of strings.")
+
+        # from guppy import hpy
+        # h=hpy()
+        # hp = h.heap()
+
+        # print "#"*80
+        
+        # print hp
+
+        # print "#"*40
+
+        # print hp.bytype[0].byvia
+        # print hp.bytype[0].byvia.more
+
+        # print "#"*40
+        # print "hp.bytype[0].byrcs"
+
+        # print hp.bytype[0].byrcs
+        # print hp.bytype[0].byrcs.more
+
+        # print "#"*40
+        # print "hp.bytype[0].byrcs[0].bysize"
+
+        # print hp.bytype[0].byrcs[0].bysize
+        # print hp.bytype[0].byrcs[0].bysize[0].byrcs
+
+        # print "#"*40
+        # print "hp.bytype[0].byclodo"
+ 
+        # print hp.bytype[0].byclodo
+        # print hp.bytype[0].byclodo.more
+
+        # print "#"*40
+
+        # print h.heapu()
+
+        return r
         
     def registerPNode(self, pn):
 
@@ -224,7 +261,7 @@ class PNodeCommon(object):
         if should_exist:
             assert key in self.cache_lookup
 
-        return self.cache_lookup[key]
+        return key, self.cache_lookup[key]
 
     def increaseCachingReference(self, pn):
 
@@ -237,7 +274,7 @@ class PNodeCommon(object):
                   (pn, False, False),
                   (pn, True, True)]:
 
-            cache = self._getCache(*(t + (False,)))
+            key, cache = self._getCache(*(t + (False,)))
             cache.reference_count += 1
 
     def decreaseCachingReference(self, pn):
@@ -251,14 +288,14 @@ class PNodeCommon(object):
                   (pn, False, False),
                   (pn, True, True)]:
             
-            cache = self._getCache(*(t + (True,)))
+            key, cache = self._getCache(*(t + (True,)))
             cache.reference_count -= 1
 
             assert cache.reference_count >= 0
 
             # Clear the cache if it's no longer needed
             if cache.reference_count == 0:
-                cache.cache = {}
+                del self.cache_lookup[key]
 
     def loadContainer(self, container):
 
@@ -282,7 +319,9 @@ class PNodeCommon(object):
         import gc
         gc.collect()
 
-        for pn in self.pnode_lookup.itervalues():
+        print "**************** running check*****************"
+
+        for pn in self.pnode_lookup.values():
             if pn.result_reference_count != 0 or pn.module_reference_count != 0 or pn.module_access_reference_count != 0:
                 
                 print (("Nonzero references, (%d, %d, %d), name = %s, key = %s, "
@@ -297,7 +336,7 @@ class PNodeCommon(object):
                       (pn, False, False),
                       (pn, True, True)]:
 
-                cache = self._getCache(*(t + (False,)))
+                key, cache = self._getCache(*(t + (False,)))
 
                 if cache.reference_count != 0:
 
@@ -308,6 +347,30 @@ class PNodeCommon(object):
                               pn.key,
                               "null" if not t[1] else pn.local_key,
                               "null" if not t[2] else pn.dependency_key))
+
+            if hasattr(pn, "module") and pn.module is not None:
+
+                print (("Non-None module, (%d, %d, %d), name = %s, key = %s, "
+                        "local_key = %s, dep_key = %s")
+                       % (pn.result_reference_count, pn.module_reference_count, pn.module_access_reference_count,
+                          pn.name, pn.key,
+                          pn.local_key, pn.dependency_key))
+
+            if hasattr(pn, "results_container") and pn.results_container is not None:
+
+                print (("Non-None results, (%d, %d, %d), name = %s, key = %s, "
+                        "local_key = %s, dep_key = %s")
+                       % (pn.result_reference_count, pn.module_reference_count, pn.module_access_reference_count,
+                          pn.name, pn.key,
+                          pn.local_key, pn.dependency_key))
+                
+            if hasattr(pn, "child_pull_dict"):
+
+                print (("Child pull dict bad!!!, (%d, %d, %d), name = %s, key = %s, "
+                        "local_key = %s, dep_key = %s")
+                       % (pn.result_reference_count, pn.module_reference_count, pn.module_access_reference_count,
+                          pn.name, pn.key,
+                          pn.local_key, pn.dependency_key))
 
 _Null = "null"
 
@@ -578,7 +641,9 @@ class PNode(object):
         m = self.p_class(self, params, results, modules)
 
         if not have_loaded_results:
+            self.child_pull_dict = pull_dict
             r = m.run()
+            del self.child_pull_dict
                 
             if type(r) is TreeDict:
                 r.freeze()
@@ -626,6 +691,7 @@ class PNode(object):
             del self.child_pull_dict
 
             self.dependent_modules_pulled = False
+            gc.collect()
 
     def increaseModuleAccessCount(self):
         self.module_access_reference_count += 1
@@ -669,6 +735,7 @@ class PNode(object):
         if self.result_reference_count == 0:
             self.results_container = None
             self.dropUnneededReferences()
+            gc.collect()
         
     def pullParameters(self):
         return self.parameters[self.name]
@@ -732,7 +799,6 @@ class PNode(object):
             
         return self.common.loadContainer(container)
 
-
     def _resolveRequestInfo(self, r):
 
         # first get the key
@@ -776,13 +842,21 @@ class PNode(object):
                                   % (r_type, name, r_type) )
 
         if r_type == "results":
-            return self.common.getResults(ptree, name)
+
+            if isinstance(r, _PNSpecBase):
+                common = PNodeCommon(self.common.manager)
+                r = common.getResults(ptree, name)
+                common._debug_referencesDone()
+                gc.collect()
+                return r
+            else:
+                return self.common.getResults(ptree, name)
         
         elif r_type == "module":
 
-            pn = PNode(self, ptree, name, 'module')
+            pn = PNode(self.common, ptree, name, 'module')
             pn.initialize()
-            pn = self.registerPNode(pn)
+            pn = self.common.registerPNode(pn)
             pn.increaseResultReference()
             pn.increaseModuleReference()
 
