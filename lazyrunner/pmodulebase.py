@@ -132,19 +132,53 @@ class PModule:
         return logging.getLogger(cls._name)
 
     @classmethod
-    def _allowsResultCaching(self):
-        return not ((hasattr(self, "disable_results_caching")
-                    and self.disable_results_caching)
-                    or (hasattr(self, "disable_result_caching")
-                        and self.disable_result_caching))
+    def __getBinaryAttr(self, attr, parameters):
+        
+        x = getattr(self, attr)
+
+        if x in [True, False]:
+            return x
+        else:
+            pb = parameters[self._name]
+
+            for t in [[], [pb], [pb, parameters]]:
+                try:
+                    ret = x(*t)
+                    break
+                except TypeError, te:
+
+                    if attr in str(te):
+                        continue
+                    else:
+                        raise
+
+            if ret not in [True, False]:
+                raise TypeError("'%s' must evaluate to or "
+                                "return True or False." % attr)
+            return ret        
+
     @classmethod
-    def _allowsCaching(self):
-        return not (hasattr(self, "disable_caching")
-                    and self.disable_caching)
+    def _allowsResultCaching(self, parameters):
+        if not self._allowsCaching(parameters):
+            return False
+
+        if hasattr(self, "disable_results_caching"):
+            return not self.__getBinaryAttr("disable_results_caching", parameters)
+        elif hasattr(self, "disable_result_caching"):
+            return not self.__getBinaryAttr("disable_result_caching", parameters)
+        else:
+            return True
+            
+    @classmethod
+    def _allowsCaching(self, parameters):
+        if hasattr(self, "disable_caching"):
+            return not self.__getBinaryAttr("disable_caching", parameters)
+        else:
+            return True
 
     def _setResults(self, r):
         self.local_results = r
-
+        
     ############################################################
     # Now the initializing and running functions
     def __init__(self, pnode, parameters, results, modules):
@@ -262,20 +296,22 @@ class PModule:
                      ignore_local,
                      ignore_dependencies,
                      is_disk_writable,
+                     is_persistent,
                      creation_function = None,
                      obj = None):
 
         if key is not None:
             key = TreeDict(key = key).hash()
 
-        d_key = (obj_name, key, ignore_module, ignore_local, ignore_dependencies)
+        d_key = (obj_name, key, ignore_module, ignore_local,
+                 ignore_dependencies, is_persistent)
 
         try:
             container = self.__container_map[d_key]
         except KeyError:
             container = self.__container_map[d_key] = self._pnode.getCacheContainer(
                 obj_name, key, ignore_module, ignore_local,
-                ignore_dependencies, is_disk_writable)
+                ignore_dependencies, is_disk_writable, is_persistent)
 
         if not is_disk_writable:
             container.disableDiskWriting()
@@ -305,8 +341,7 @@ class PModule:
     def inCache(self, obj_name, key = None,
                 ignore_module = False,
                 ignore_local = False,
-                ignore_dependencies = False,
-                is_disk_writable = True):
+                ignore_dependencies = False):
         """
         Returns True if an object with key `obj_name` can be loaded
         from cache and False otherwise.
@@ -344,13 +379,14 @@ class PModule:
         """
 
         return self._cacheAction("query", obj_name, key, ignore_module,
-                                 ignore_local, ignore_dependencies, is_disk_writable)
+                                 ignore_local, ignore_dependencies, True, True)
                                         
     def loadFromCache(self, obj_name, key = None,
                       ignore_module = False,
                       ignore_local = False,
                       ignore_dependencies = False,
-                      is_disk_writable = True,
+                      disk_writable = True,
+                      persistent = True,
                       creation_function = None):
         """
         Loads the specific object from the cache if available.  If it
@@ -386,6 +422,13 @@ class PModule:
         parameter branch and is independent of the results of
         dependent modules, then it can be stored and loaded from cache
         more frequently by specifying ``ignore_dependencies=True``).
+        If `persistent` is False, then only one objects with the
+        given name ever held in the in-memory cache at a single time.
+        If `ignore_module` is True, this holds across modules,
+        otherwise, it holds only within this module.
+
+        If `disk_writable` is False, then only the internal memory
+        cache is used; the object is never written to disk.
 
         If `creation_function` is not None, and the object is not in
         cache, ``creation_function()`` is called to create an instance
@@ -405,15 +448,16 @@ class PModule:
         """
 
         return self._cacheAction("load", obj_name, key, ignore_module,
-            ignore_local, ignore_dependencies, is_disk_writable,
-            creation_function = creation_function)
+            ignore_local, ignore_dependencies, disk_writable,
+            persistent, creation_function = creation_function)
         
     def saveToCache(self, obj_name, obj,
                     key = None,
                     ignore_module = False,
                     ignore_local = False,
                     ignore_dependencies = False,
-                    is_disk_writable = True):
+                    persistent = True,
+                    disk_writable = True):
         """
         Caches the specific object `obj` in the local cache.
 
@@ -447,10 +491,19 @@ class PModule:
         parameter branch and is independent of the results of
         dependent modules, then it can be saved and loaded from cache
         more frequently by specifying ``ignore_dependencies=True``).
+
+        If `persistent` is False, then only one objects with the
+        given name ever held in the in-memory cache at a single time.
+        If `ignore_module` is True, this holds across modules,
+        otherwise, it holds only within this module.
+
+        If `disk_writable` is False, then only the internal memory
+        cache is used; the object is never written to disk.
         """
 
-        return self._cacheAction("save", obj_name, key, ignore_module,
-            ignore_local, ignore_dependencies, is_disk_writable, obj=obj)
+        return self._cacheAction(
+            "save", obj_name, key, ignore_module, ignore_local,
+            ignore_dependencies, disk_writable, persistent, obj=obj)
 
     def key(self, obj_name = None,
             key = None,
@@ -467,7 +520,7 @@ class PModule:
 
         return self._cacheAction("key", "__null__" if obj_name is None else obj_name,
                                  key, ignore_module, ignore_local,
-                                 ignore_dependencies, True)
+                                 ignore_dependencies, True, True)
         
     def getResults(self, r):
         """

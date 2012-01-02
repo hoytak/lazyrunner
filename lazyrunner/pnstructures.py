@@ -4,6 +4,7 @@ from collections import defaultdict
 from os.path import join
 from pmodulelookup import *
 import hashlib, base64, weakref, sys, gc
+from itertools import chain
 
 results_weak_lookup = weakref.WeakValueDictionary()
 tn_counter = 0
@@ -99,7 +100,8 @@ class PNodeModuleCacheContainer(object):
     def __init__(self, pn_name, name, 
                  local_key, dependency_key,
                  specific_key = None,
-                 is_disk_writable = True):
+                 is_disk_writable = True,
+                 is_persistent = True):
 
         self.__pn_name = pn_name
         self.__name = name
@@ -107,9 +109,11 @@ class PNodeModuleCacheContainer(object):
         self.__local_key = local_key
         self.__dependency_key = dependency_key
         self.__is_disk_writable = is_disk_writable
+        self.__is_non_persistent = not is_persistent
         self.__obj = None
         self.__obj_is_loaded = False
         self.__disk_save_hook = None
+        self.__non_persistent_hook = None
 
     def getFilename(self):
 
@@ -134,6 +138,13 @@ class PNodeModuleCacheContainer(object):
     def getObjectKey(self):
         return (self.__name, self.__specific_key)
 
+    def isNonPersistent(self):
+        return self.__is_non_persistent
+
+    def getNonPersistentKey(self):
+        assert self.__is_non_persistent
+        return (self.__pn_name, self.__name)
+
     def setObject(self, obj):
         assert not self.__obj_is_loaded
         self.__obj_is_loaded = True
@@ -141,9 +152,21 @@ class PNodeModuleCacheContainer(object):
 
         if self.__disk_save_hook is not None:
             self.__disk_save_hook(self)
+            self.__disk_save_hook = None
+
+        if self.__non_persistent_hook is not None:
+            self.__non_persistent_hook(self)
+            self.__non_persistent_hook = None
+
+    def isLocallyEqual(self, pnc):
+        return self.__name == pnc.__name and self.__specific_key == pnc.__specific_key
 
     def setObjectSaveHook(self, hook):
         self.__disk_save_hook = hook
+
+    def setNonPersistentObjectSaveHook(self, hook):
+        assert self.__is_non_persistent
+        self.__non_persistent_hook = hook
     
     def getObject(self):
         assert self.__obj_is_loaded
@@ -159,11 +182,36 @@ class PNodeModuleCacheContainer(object):
     def isDiskWritable(self):
         return self.__is_disk_writable
 
+    def objRefCount(self):
+        return sys.getrefcount(self.__obj)
+
 class PNodeModuleCache(object):
 
     def __init__(self):
         self.reference_count = 0
         self.cache = {}
+
+class _PNodeNonPersistentDeleter(object):
+    
+    def __init__(self, common):
+        self.common = common
+        
+    def __call__(self, container):
+        np_key = container.getNonPersistentKey()
+
+        try:
+            old_container = self.common.non_persistant_pointer_lookup[np_key]
+        except KeyError:
+            old_container = None
+
+        if old_container is not None:
+            try:
+                del self.common.cache_lookup[old_container.getCacheKey()].cache[old_container.getObjectKey()]
+            except KeyError:
+                pass
+
+        self.common.non_persistant_pointer_lookup[np_key] = container
+              
 
 # This class holds the runtime environment for the pnodes
 class PNodeCommon(object):
@@ -174,8 +222,12 @@ class PNodeCommon(object):
         # This is for node filtering, i.e. eliminating duplicates
         self.pnode_lookup = weakref.WeakValueDictionary()
 
+        self.non_persistant_pointer_lookup = weakref.WeakValueDictionary()
+        self.non_persistant_deleter = _PNodeNonPersistentDeleter(self)
+
         # This is for cache lootup
         self.cache_lookup = defaultdict(PNodeModuleCache)
+        
 
     def getResults(self, parameters, names):
 
@@ -196,40 +248,44 @@ class PNodeCommon(object):
         else:
             raise TypeError("Names must be a string or list/tuple of strings.")
 
-        # from guppy import hpy
-        # h=hpy()
-        # hp = h.heap()
+        from guppy import hpy
+        h=hpy()
+        hp = h.heap()
 
-        # print "#"*80
+        print "#"*80
         
-        # print hp
+        print hp
 
-        # print "#"*40
+        print "#"*40
 
-        # print hp.bytype[0].byvia
-        # print hp.bytype[0].byvia.more
+        print hp.bytype[0].byvia
+        print hp.bytype[0].byvia.more
 
-        # print "#"*40
-        # print "hp.bytype[0].byrcs"
+        print "#"*40
+        print "hp.bytype[0].byrcs"
 
-        # print hp.bytype[0].byrcs
-        # print hp.bytype[0].byrcs.more
+        print hp.bytype[0].byrcs
+        print hp.bytype[0].byrcs.more
 
-        # print "#"*40
-        # print "hp.bytype[0].byrcs[0].bysize"
+        print "#"*40
+        print "hp.bytype[0].byrcs[0].bysize"
 
-        # print hp.bytype[0].byrcs[0].bysize
-        # print hp.bytype[0].byrcs[0].bysize[0].byrcs
+        print hp.bytype[0].byrcs[0].bysize
+        print hp.bytype[0].byrcs[0].bysize[0].byrcs
 
-        # print "#"*40
-        # print "hp.bytype[0].byclodo"
+        print "#"*40
+        print "hp.bytype[0].byclodo"
  
-        # print hp.bytype[0].byclodo
-        # print hp.bytype[0].byclodo.more
+        print hp.bytype[0].byclodo
+        print hp.bytype[0].byclodo.more
 
-        # print "#"*40
+        print "#"*40
 
-        # print h.heapu()
+        print h.heapu()
+
+        print "*"*80
+        print "Number of items in cache = ", sum([len(cache.cache) for cache in self.cache_lookup.itervalues()])
+        print "Number of PNodes in existance =", len(self.pnode_lookup)
 
         return r
         
@@ -295,20 +351,31 @@ class PNodeCommon(object):
 
             # Clear the cache if it's no longer needed
             if cache.reference_count == 0:
+                # if len(cache.cache) != 0:
+                #     print "Clearing cache %s. objects in the cache are:" % str(key)
+
+                #     for v in cache.cache.itervalues():
+                #         print "%s: ref_count = %d" % (v.getObjectKey(), v.objRefCount())
+                
                 del self.cache_lookup[key]
 
-    def loadContainer(self, container):
+    def loadContainer(self, container, no_local_caching = False):
 
         assert not container.objectIsLoaded()
 
-        cache = self.cache_lookup[container.getCacheKey()].cache
+        if not no_local_caching:
+            cache = self.cache_lookup[container.getCacheKey()]
+            c = cache.cache
 
-        obj_key = container.getObjectKey()
+            obj_key = container.getObjectKey()
 
-        if obj_key in cache:
-            return cache[obj_key]
-        else:
-            cache[obj_key] = container
+            if obj_key in c:
+                return c[obj_key]
+            else:
+                c[obj_key] = container
+
+            if container.isNonPersistent():
+                container.setNonPersistentObjectSaveHook(self.non_persistant_deleter)
 
         # now see if it can be loaded from disk
         self.manager._loadFromDisk(container)
@@ -423,7 +490,7 @@ class PNode(object):
             
             self.local_key = base64.b64encode(h.digest(), "az")[:8]
 
-            self.is_disk_writable = p_class._allowsCaching()
+            self.is_disk_writable = p_class._allowsCaching(self.parameters)
             self.module = None
             self.results_container = None
             self.results_reported = False
@@ -462,11 +529,9 @@ class PNode(object):
 
                         pn = PNode(self.common, parameters, s, p_type)
 
-                        n = name_override if name_override is not None else pn.name
-
                         h = self.full_key if parameters is self.parameters else parameters.hash()
 
-                        rs[(s, h)] = (n if first_order else None, pn)
+                        rs[(s, h)] = (pn.name if first_order else name_override, pn)
 
                 elif t is list or t is tuple or t is set:
                     for se in s:
@@ -572,7 +637,10 @@ class PNode(object):
                     name = "__results__",
                     local_key = self.local_key,
                     dependency_key = self.dependency_key,
-                    is_disk_writable = self.is_disk_writable and self.p_class._allowsResultCaching()))
+                    is_disk_writable = (
+                        self.is_disk_writable
+                        and self.p_class._allowsResultCaching(self.parameters))),
+                no_local_caching = True)
 
             have_loaded_results = self.results_container.objectIsLoaded()
 
@@ -755,7 +823,17 @@ class PNode(object):
 
         ret = (self.parameters[self.name], r)
 
+        rc = self.results_container
+
+        # print "#"*30
+        # print "result %d returning with earlier ref = %d" % (id(r), sys.getrefcount(r))
+        # print "container rc = %d" % (sys.getrefcount(rc))
+        
         self.decreaseResultReference()
+
+        # print "result %d returned with new_ref = %d" % (id(r), sys.getrefcount(r))
+        # print "container rc = %d" % sys.getrefcount(rc)
+        # print "new res count = %d" % self.result_reference_count
 
         return ret
 
@@ -787,7 +865,7 @@ class PNode(object):
     # Loading cache stuff
 
     def getCacheContainer(self, obj_name, key, ignore_module, ignore_local,
-                          ignore_dependencies, is_disk_writable):
+                          ignore_dependencies, is_disk_writable, is_persistent):
 
         container = PNodeModuleCacheContainer(
             pn_name = None if ignore_module else self.name,
@@ -795,7 +873,8 @@ class PNode(object):
             local_key = None if ignore_local else self.local_key,
             dependency_key = None if ignore_dependencies else self.dependency_key,
             specific_key = key,
-            is_disk_writable = is_disk_writable and self.is_disk_writable)
+            is_disk_writable = is_disk_writable and self.is_disk_writable,
+            is_persistent = is_persistent)
             
         return self.common.loadContainer(container)
 
@@ -834,12 +913,12 @@ class PNode(object):
             elif r_type == "module" and module is not _Null:
                 return module
             
-        # should return before now if everything is good
-        self.p_class.log.warning( ("%s requested (%s) without being specified as "
-                                   "a %s dependency; possible source of cache corruption "
-                                   "if the module result depends on this without "
-                                   "specification in the local parameter branch.")
-                                  % (r_type, name, r_type) )
+        # # should return before now if everything is good
+        # self.p_class.log.warning( ("%s requested (%s) without being specified as "
+        #                            "a %s dependency; possible source of cache corruption "
+        #                            "if the module result depends on this without "
+        #                            "specification in the local parameter branch.")
+        #                           % (r_type, name, r_type) )
 
         if r_type == "results":
 
@@ -848,6 +927,7 @@ class PNode(object):
                 r = common.getResults(ptree, name)
                 common._debug_referencesDone()
                 gc.collect()
+                assert sys.getrefcount(r) == 2, sys.getrefcount(r)
                 return r
             else:
                 return self.common.getResults(ptree, name)
