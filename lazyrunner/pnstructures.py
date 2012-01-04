@@ -6,8 +6,20 @@ from pmodulelookup import *
 import hashlib, base64, weakref, sys, gc
 from itertools import chain
 
+debug_mode = True
+
 results_weak_lookup = weakref.WeakValueDictionary()
 tn_counter = 0
+
+_props = defaultdict(lambda: [])
+
+_okay_mods = None
+
+def register_object_property(obj, prop):
+    _props[id(obj)].append(prop)
+
+
+################################################################################
 
 class _PNSpecBase(object):
     pass
@@ -236,9 +248,22 @@ class PNodeCommon(object):
                 raise TypeError("Module name not a string.")
             
             pn = PNode(self, parameters, n, 'results')
+            register_object_property(pn, "getPN")
+            
+            assert sys.getrefcount(pn) == 2, sys.getrefcount(pn)
+            
+            print "FIRST: %s has ref count %d" % (pn.name, sys.getrefcount(pn))
             pn.initialize()
+            
+            assert sys.getrefcount(pn) == 2, sys.getrefcount(pn)
+            
+            #print "pre-reg: %s-%s has ref count %d" % (pn.name, pn.key, sys.getrefcount(pn))
+            
             pn = self.registerPNode(pn)
+            #print "post-reg: %s-%s has ref count %d" % (pn.name, pn.key, sys.getrefcount(pn))
+            pn.increaseParameterReference()
             pn.increaseResultReference()
+            #print "post-res-ref: %s-%s has ref count %d" % (pn.name, pn.key, sys.getrefcount(pn))
             return pn
         
         if type(names) is str:
@@ -248,65 +273,118 @@ class PNodeCommon(object):
         else:
             raise TypeError("Names must be a string or list/tuple of strings.")
 
-        from guppy import hpy
-        h=hpy()
-        hp = h.heap()
-
-        print "#"*80
-        
-        print hp
-
-        print "#"*40
-
-        print hp.bytype[0].byvia
-        print hp.bytype[0].byvia.more
-
-        print "#"*40
-        print "hp.bytype[0].byrcs"
-
-        print hp.bytype[0].byrcs
-        print hp.bytype[0].byrcs.more
-
-        print "#"*40
-        print "hp.bytype[0].byrcs[0].bysize"
-
-        print hp.bytype[0].byrcs[0].bysize
-        print hp.bytype[0].byrcs[0].bysize[0].byrcs
-
-        print "#"*40
-        print "hp.bytype[0].byclodo"
- 
-        print hp.bytype[0].byclodo
-        print hp.bytype[0].byclodo.more
-
-        print "#"*40
-
-        print h.heapu()
+        gc.collect()
 
         print "*"*80
         print "Number of items in cache = ", sum([len(cache.cache) for cache in self.cache_lookup.itervalues()])
         print "Number of PNodes in existance =", len(self.pnode_lookup)
 
+        print "PNodes have the following propeties: "
+
+        pd = defaultdict(lambda: 0)
+
+        in_common = None 
+
+        for v in self.pnode_lookup.values():
+            if id(v) not in _okay_mods:
+                st = set(_props[id(v)])
+
+                if in_common is None:
+                    in_common = st
+                else:
+                    in_common = in_common.intersection(st)
+                
+                s = '; '.join(sorted(set(_props[id(v)])))
+                pd[s] += 1
+
+        for count, s in sorted( (count, s) for s, count in pd.iteritems()):
+            print ">"*40, count, "<"*40
+            print s
+
+        print "Common:"
+
+        print "; ".join(in_common)
+            
+        
+
+
+        if False and debug_mode:
+            from guppy import hpy
+            h=hpy()
+            hp = h.heap()
+
+            print "#"*80
+
+            print hp
+
+            print "#"*40
+
+            print hp.bytype[0].byvia
+            print hp.bytype[0].byvia.more
+
+            print "#"*40
+            print "hp.bytype[0].byrcs"
+
+            print hp.bytype[0].byrcs
+            print hp.bytype[0].byrcs.more
+
+            print "#"*40
+            print "hp.bytype[0].byrcs[0].bysize"
+
+            print hp.bytype[0].byrcs[0].bysize
+            print hp.bytype[0].byrcs[0].bysize[0].byrcs
+
+            print "#"*40
+            print "hp.bytype[0].byclodo"
+
+            print hp.bytype[0].byclodo
+            print hp.bytype[0].byclodo.more
+
+            hp = h.heapu()
+
+            print "#"*80
+
+            print hp
+
+            print "#"*40
+
         return r
         
     def registerPNode(self, pn):
+
+        gc.collect()
 
         # see if it's a duplicate
         key = (pn.name, pn.key)
 
         if key in self.pnode_lookup:
             
+            register_object_property(pn, "register already in")
+
             pnf = self.pnode_lookup[key]
             if not pn.is_only_parameter_dependency:
                 pnf.is_only_parameter_dependency = False
             pn = pnf
             
         else:
+
+            register_object_property(pn, "register_new")
+
             self.pnode_lookup[key] = pn
-            
+
+        #print "pre-build: %s-%s has ref count %d" % (pn.name, pn.key, sys.getrefcount(pn))
         pn.buildReferences()
+        #print "post-build: %s-%s has ref count %d" % (pn.name, pn.key, sys.getrefcount(pn))
             
         return pn
+
+    def deregisterPNode(self, pn):
+        key = (pn.name, pn.key)
+
+        assert self.pnode_lookup[key] is pn
+
+        del self.pnode_lookup[key]
+        
 
     def _getCache(self, pn, use_local, use_dependencies, should_exist):
         
@@ -321,6 +399,8 @@ class PNodeCommon(object):
 
     def increaseCachingReference(self, pn):
 
+        register_object_property(pn, "increaseCachingReference")
+
         # print ("increasing reference, name = %s, key = %s, local_key = %s, dep_key = %s"
         #        % (pn.name, pn.key, pn.local_key, pn.dependency_key))
 
@@ -334,6 +414,8 @@ class PNodeCommon(object):
             cache.reference_count += 1
 
     def decreaseCachingReference(self, pn):
+
+        register_object_property(pn, "decreaseCachingReference")
 
         # print ("decreasing reference,  name = %s, key = %s, local_key = %s, dep_key = %s"
         #        % (pn.name, pn.key, pn.local_key, pn.dependency_key))
@@ -383,6 +465,9 @@ class PNodeCommon(object):
         return container
 
     def _debug_referencesDone(self):
+        if not debug_mode:
+            return
+        
         import gc
         gc.collect()
 
@@ -445,6 +530,10 @@ class PNode(object):
 
     def __init__(self, common, parameters, name, p_type):
 
+        gc.collect()
+  
+        register_object_property(self, p_type) #"%s-%s" % (name, p_type) )
+
         self.common = common
         self.parameters = parameters.copy()
         self.parameters.attach(recursive = True)
@@ -497,6 +586,7 @@ class PNode(object):
             self.full_key = self.parameters.hash()
 
             # Reference counting isn't used in the parameter classes
+            self.parameter_reference_count = 0
             self.result_reference_count = 0
             self.module_reference_count = 0
             self.module_access_reference_count = 0
@@ -506,6 +596,8 @@ class PNode(object):
             
         else:
             self.parameter_key = self.parameters.hash(name)
+            register_object_property(self, "param-only")
+            self.parameter_reference_count = 0
 
     ########################################
     # Setup
@@ -513,6 +605,12 @@ class PNode(object):
     def initialize(self):
         # This extra step is needed as the child pnodes must be
         # consolidated into the right levels first
+
+        register_object_property(self, "initialized")
+
+        self.key = "null"
+
+        # print "init-1: %s-%s has ref count %d" % (self.name, self.key, sys.getrefcount(self))
 
         assert self.is_pmodule
 
@@ -528,9 +626,13 @@ class PNode(object):
                     if s != self.name:
 
                         pn = PNode(self.common, parameters, s, p_type)
+                        register_object_property(pn, "add-%s" % p_type)
 
                         h = self.full_key if parameters is self.parameters else parameters.hash()
 
+                        assert pn is not self
+                        # print "init-1x: %s-%s has ref count %d" % (self.name, self.key, sys.getrefcount(self))
+                        
                         rs[(s, h)] = (pn.name if first_order else name_override, pn)
 
                 elif t is list or t is tuple or t is set:
@@ -546,6 +648,8 @@ class PNode(object):
 
             return rs
 
+        # print "init-2: %s-%s has ref count %d" % (self.name, self.key, sys.getrefcount(self))
+
         # Initializes the results above the dependencies
 
         # get the verbatim children specifications and lists of
@@ -557,23 +661,40 @@ class PNode(object):
         self.result_dependencies = _processDependencySet("results", r_dep)
         self.parameter_dependencies = _processDependencySet("parameters", p_dep)
 
+        # print "init-3: %s-%s has ref count %d" % (self.name, self.key, sys.getrefcount(self))
+                        
         # Now go through and push the dependencies down
         self.result_dependencies.update(self.module_dependencies)
         self.parameter_dependencies.update(self.result_dependencies)
 
+        # print "init-4: %s-%s has ref count %d" % (self.name, self.key, sys.getrefcount(self))
+                        
         # Go through and instantiate all the children
         for n, pn in self.result_dependencies.itervalues():
             pn.initialize()
+
+        # print "init-5: %s-%s has ref count %d" % (self.name, self.key, sys.getrefcount(self))
+
+        assert len(set(id(pn) for n, pn in self.parameter_dependencies.itervalues())) == len(self.parameter_dependencies)
 
         # Now go through and eliminate duplicates
         for k, (n, pn) in self.result_dependencies.items():
             pnf = self.common.registerPNode(pn)
 
             if pnf is not pn:
+                register_object_property(pn, "old, replaced")
+                register_object_property(pn, "new replacement")
+
                 self.result_dependencies[k] = (n, pnf)
+                self.parameter_dependencies[k] = (n, pnf)
 
                 if k in self.module_dependencies:
                     self.module_dependencies[k] = (n, pnf)
+
+                print "Old object %s-%d has ref count %d" % (pn.name, id(pn), sys.getrefcount(pn))
+            else:
+                register_object_property(pn, "same, not replaced")
+
 
         ########################################
         # don't need to propegate parameter dependencies to children,
@@ -591,15 +712,22 @@ class PNode(object):
         self.dependency_key = base64.b64encode(h.digest(), "az")[:8]
 
         h.update(self.local_key)
-        
+
+        # print "init-7: %s-%s has ref count %d" % (self.name, self.key, sys.getrefcount(self))
+
         self.key = base64.b64encode(h.digest(), "az")[:8]
 
     def buildReferences(self):
 
         if not self.is_only_parameter_dependency and not self.children_have_reference:
 
+            register_object_property(self, "buildReferences")
+
             ########################################
             # Do reference counting with all the children
+            for k, (n, pn) in self.parameter_dependencies.items():
+                pn.increaseParameterReference()
+
             for k, (n, pn) in self.result_dependencies.items():
                 pn.increaseResultReference()
 
@@ -612,8 +740,12 @@ class PNode(object):
 
         if self.children_have_reference:
 
+            register_object_property(self, "dropUnneededReferences")
+            
             ########################################
             # Do reference counting with all the children
+            for k, (n, pn) in self.parameter_dependencies.items():
+                pn.decreaseParameterReference()
 
             for k, (n, pn) in self.module_dependencies.items():
                 pn.decreaseModuleReference()
@@ -628,7 +760,11 @@ class PNode(object):
 
     def _instantiate(self, need_module):
 
+        register_object_property(self, "instantiate called")
+
         if self.results_container is None:
+
+            register_object_property(self, "results_loaded")
 
             # Attempt to load the results from cache
             self.results_container = self.common.loadContainer(
@@ -646,7 +782,10 @@ class PNode(object):
 
             # we're done if the results are loaded and that's all we need    
             if have_loaded_results:
+                register_object_property(self, "have_results_loaded")
+
                 if self.module_reference_count == 0:
+                    register_object_property(self, "have_results_loaded:no_module")
                     assert not need_module
                     self.dropUnneededReferences()
                     return
@@ -702,6 +841,8 @@ class PNode(object):
         params[self.name] = self.parameters[self.name]
         params.freeze()
 
+        register_object_property(self, "module instantiated")
+
         # Now we've pulled all we need!
         self.children_have_reference = False
 
@@ -726,9 +867,12 @@ class PNode(object):
             self.module = m
             self.child_pull_dict = pull_dict
             self.dependent_modules_pulled = True
+            register_object_property(self, "module kept")
             
         else:
             
+            register_object_property(self, "module transient")
+
             # We're done with the module, so we need to say so
             for k, (load_name, pn) in self.module_dependencies.iteritems():
                 pn.decreaseModuleAccessCount()
@@ -748,6 +892,8 @@ class PNode(object):
         
         if mrc_zero and mac_zero and self.dependent_modules_pulled:
 
+            register_object_property(self, "module deletion by ref count")
+
             # propegate all the dependencies
             for k, (load_name, pn) in self.module_dependencies.iteritems():
                 pn.decreaseModuleAccessCount()
@@ -761,31 +907,41 @@ class PNode(object):
             self.dependent_modules_pulled = False
             gc.collect()
 
-    def increaseModuleAccessCount(self):
-        self.module_access_reference_count += 1
-        self.common.increaseCachingReference(self)
+    def _checkDeletability(self):
+        if not self.is_only_parameter_dependency:
+            assert self.module_reference_count <= self.parameter_reference_count
+            assert self.result_reference_count <= self.parameter_reference_count
 
-    def decreaseModuleAccessCount(self):
-        assert self.module_access_reference_count >= 1
+        if self.parameter_reference_count == 0 and (
+            self.is_only_parameter_dependency or self.module_access_reference_count == 0):
 
-        self.module_access_reference_count -= 1
-        self.common.decreaseCachingReference(self)
-        
-        if self.module_access_reference_count == 0:
-            self._checkModuleDeletionAllowances()
-        
-    def increaseModuleReference(self):
-        self.module_reference_count += 1
-        self.common.increaseCachingReference(self)
+            # Clean out the heavy parts in light of everythin
+            if not self.is_only_parameter_dependency:
+                self.common.deregisterPNode(self)
+                self.module_dependencies.clear()
+                self.result_dependencies.clear()
+                self.parameter_dependencies.clear()
 
-    def decreaseModuleReference(self):
-        assert self.module_reference_count >= 1
-        
-        self.module_reference_count -= 1
-        self.common.decreaseCachingReference(self)
+            self.parameters = None
 
-        if self.module_reference_count == 0:
-            self._checkModuleDeletionAllowances()
+    def increaseParameterReference(self):
+        if not self.is_only_parameter_dependency:
+            assert self.module_reference_count <= self.parameter_reference_count
+            assert self.result_reference_count <= self.parameter_reference_count
+            
+        self.parameter_reference_count += 1
+
+    def decreaseParameterReference(self):
+
+        assert self.parameter_reference_count >= 1
+        self.parameter_reference_count -= 1
+
+        if not self.is_only_parameter_dependency:
+            assert self.module_reference_count <= self.parameter_reference_count
+            assert self.result_reference_count <= self.parameter_reference_count
+
+        if self.parameter_reference_count == 0:
+            self._checkDeletability()
             
     def increaseResultReference(self):
         self.result_reference_count += 1
@@ -801,17 +957,50 @@ class PNode(object):
         assert self.module_reference_count <= self.result_reference_count
 
         if self.result_reference_count == 0:
+            register_object_property(self, "results ref dealloc called")
             self.results_container = None
             self.dropUnneededReferences()
-            gc.collect()
+
+    def increaseModuleAccessCount(self):
+        self.module_access_reference_count += 1
+        self.common.increaseCachingReference(self)
+
+    def decreaseModuleAccessCount(self):
+        assert self.module_access_reference_count >= 1
+
+        self.module_access_reference_count -= 1
+        self.common.decreaseCachingReference(self)
         
+        if self.module_access_reference_count == 0:
+            self._checkModuleDeletionAllowances()
+            self._checkDeletability()
+        
+    def increaseModuleReference(self):
+        self.module_reference_count += 1
+        self.common.increaseCachingReference(self)
+
+    def decreaseModuleReference(self):
+        assert self.module_reference_count >= 1
+        
+        self.module_reference_count -= 1
+        self.common.decreaseCachingReference(self)
+
+        if self.module_reference_count == 0:
+            self._checkModuleDeletionAllowances()
+            
     def pullParameters(self):
-        return self.parameters[self.name]
+        p = self.parameters[self.name]
+
+        self.decreaseParameterReference()
+
+        return p
 
     def pullUpToResults(self):
         
         # print "Pulling results for module %s." % self.name
 
+        register_object_property(self, "pullUpToResults")
+            
         assert self.result_reference_count >= 1
 
         if self.results_container is None:
@@ -830,6 +1019,7 @@ class PNode(object):
         # print "container rc = %d" % (sys.getrefcount(rc))
         
         self.decreaseResultReference()
+        self.decreaseParameterReference()
 
         # print "result %d returned with new_ref = %d" % (id(r), sys.getrefcount(r))
         # print "container rc = %d" % sys.getrefcount(rc)
@@ -838,6 +1028,8 @@ class PNode(object):
         return ret
 
     def pullUpToModule(self):
+
+        register_object_property(self, "pullUpToModule")
 
         # print "Pulling module for module %s." % self.name
         assert self.module_reference_count >= 0
@@ -855,6 +1047,7 @@ class PNode(object):
         
         self.decreaseModuleReference()
         self.decreaseResultReference()
+        self.decreaseParameterReference()
 
         return ret
 
@@ -866,6 +1059,8 @@ class PNode(object):
 
     def getCacheContainer(self, obj_name, key, ignore_module, ignore_local,
                           ignore_dependencies, is_disk_writable, is_persistent):
+
+        register_object_property(self, "got cache container")
 
         container = PNodeModuleCacheContainer(
             pn_name = None if ignore_module else self.name,
@@ -899,6 +1094,13 @@ class PNode(object):
         
     def getSpecific(self, r_type, r):
 
+        global _okay_mods
+
+        if _okay_mods is None:
+            _okay_mods = set(_props.keys())
+
+        register_object_property(self, "getSpecific")
+
         name, ptree, key = self._resolveRequestInfo(r)
 
         lookup_key = (name, key)
@@ -923,11 +1125,11 @@ class PNode(object):
         if r_type == "results":
 
             if isinstance(r, _PNSpecBase):
-                common = PNodeCommon(self.common.manager)
-                r = common.getResults(ptree, name)
-                common._debug_referencesDone()
+                # common = PNodeCommon(self.common.manager)
+                r = self.common.getResults(ptree, name)
+                # common._debug_referencesDone()
                 gc.collect()
-                assert sys.getrefcount(r) == 2, sys.getrefcount(r)
+                # assert sys.getrefcount(r) == 2, sys.getrefcount(r)
                 return r
             else:
                 return self.common.getResults(ptree, name)
