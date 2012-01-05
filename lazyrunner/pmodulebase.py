@@ -216,10 +216,6 @@ class PModule:
 
         self.log.debug("Module %s set up." % self._name)
 
-    def __del__(self):
-        print ">>>>>>>>>>>>>>>>>>>> Module %s cleaned up. <<<<<<<<<<<<<<<<<<<<" % self._name
-        assert self._pnode.module_access_reference_count == 0
-
     # The setup function; in case it's not needed
     def setup(self):
         """
