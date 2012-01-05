@@ -178,6 +178,21 @@ class PModule:
 
     def _setResults(self, r):
         self.local_results = r
+
+    def _destroy(self):
+
+        # makes the the GC easier
+
+        del self.local_results
+        del self.modules
+        del self.results
+        del self.parameters
+        del self.p
+        self.__container_map.clear()
+
+        self.log.debug("Module %s destroyed." % self._name)
+
+        self._pnode = None
         
     ############################################################
     # Now the initializing and running functions
@@ -202,8 +217,8 @@ class PModule:
         self.log.debug("Module %s set up." % self._name)
 
     def __del__(self):
-        self.log.debug("**** Module %s cleaned up. ***" % self._name)
-        
+        print ">>>>>>>>>>>>>>>>>>>> Module %s cleaned up. <<<<<<<<<<<<<<<<<<<<" % self._name
+        assert self._pnode.module_access_reference_count == 0
 
     # The setup function; in case it's not needed
     def setup(self):
