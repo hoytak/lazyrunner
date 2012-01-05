@@ -307,46 +307,6 @@ class PNodeCommon(object):
 
         # print "; ".join(in_common)
             
-        if debug_mode:
-            from guppy import hpy
-            h=hpy()
-            hp = h.heap()
-
-            print "#"*80
-
-            print hp
-
-            print "#"*40
-
-            print hp.bytype[0].byvia
-            print hp.bytype[0].byvia.more
-
-            print "#"*40
-            print "hp.bytype[0].byrcs"
-
-            print hp.bytype[0].byrcs
-            print hp.bytype[0].byrcs.more
-
-            print "#"*40
-            print "hp.bytype[0].byrcs[0].bysize"
-
-            print hp.bytype[0].byrcs[0].bysize
-            print hp.bytype[0].byrcs[0].bysize[0].byrcs
-
-            print "#"*40
-            print "hp.bytype[0].byclodo"
-
-            print hp.bytype[0].byclodo
-            print hp.bytype[0].byclodo.more
-
-            hp = h.heapu()
-
-            print "#"*80
-
-            print hp
-
-            print "#"*40
-
         return r
         
     def registerPNode(self, pn):
@@ -763,14 +723,14 @@ class PNode(object):
             
             ########################################
             # Do reference counting with all the children
-            for k, (n, pn) in self.parameter_dependencies.items():
-                pn.decreaseParameterReference()
-
             for k, (n, pn) in self.module_dependencies.items():
                 pn.decreaseModuleReference()
 
             for k, (n, pn) in self.result_dependencies.items():
                 pn.decreaseResultReference()
+
+            for k, (n, pn) in self.parameter_dependencies.items():
+                pn.decreaseParameterReference()
 
             self.children_have_reference = False
 
