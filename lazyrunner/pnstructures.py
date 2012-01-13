@@ -463,7 +463,6 @@ class PNode(object):
             
             self.local_key = base64.b64encode(h.digest(), "az")[:8]
 
-            self.is_disk_writable = p_class._allowsCaching(self.parameters)
             self.results_reported = False
             self.full_key = self.parameters.hash()
 
@@ -578,6 +577,19 @@ class PNode(object):
 
         self.key = base64.b64encode(h.digest(), "az")[:8]
 
+        # Load the parameter tree
+        self.dependency_parameter_tree = TreeDict()
+
+        for (n, th), (ln, pn) in sorted(self.parameter_dependencies.iteritems()):
+            if ln is not None:
+                self.dependency_parameter_tree[ln] = pn.pullParameterPreReferenceCount()
+
+        self.dependency_parameter_tree[self.name] = self.parameters[self.name]
+
+        self.is_disk_writable = self.p_class._allowsCaching(self.dependency_parameter_tree)
+        self.is_result_disk_writable = (False if not self.is_disk_writable else
+                                        self.p_class._allowsResultCaching(self.dependency_parameter_tree))
+
     def buildReferences(self):
 
         if not self.is_only_parameter_dependency and not self.children_have_reference:
@@ -626,9 +638,7 @@ class PNode(object):
                     name = "__results__",
                     local_key = self.local_key,
                     dependency_key = self.dependency_key,
-                    is_disk_writable = (
-                        self.is_disk_writable
-                        and self.p_class._allowsResultCaching(self.parameters))),
+                    is_disk_writable = self.is_result_disk_writable),
                 no_local_caching = True)
 
             have_loaded_results = self.results_container.objectIsLoaded()
@@ -831,6 +841,9 @@ class PNode(object):
 
         if self.module_reference_count == 0:
             self._checkModuleDeletionAllowances()
+
+    def pullParameterPreReferenceCount(self):
+        return self.parameters[self.name]
             
     def pullParameters(self):
         p = self.parameters[self.name]
