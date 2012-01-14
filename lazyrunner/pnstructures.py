@@ -239,7 +239,7 @@ class PNodeCommon(object):
             pn = PNode(self, parameters, n, 'results')
             pn.initialize()
             
-            assert sys.getrefcount(pn) == 2, sys.getrefcount(pn)
+            # assert sys.getrefcount(pn) == 2, sys.getrefcount(pn)
             
             pn = self.registerPNode(pn)
             pn.increaseParameterReference()
@@ -447,14 +447,7 @@ class PNode(object):
 
             p_class = self.p_class = getPModuleClass(self.name)
             
-            try:
-                p = p_class.preprocessParameters(self.parameters[name])
-            except TypeError:
-                p = p_class.preprocessParameters(self.parameters[name], self.parameters)
-                
-            if p is not None:
-                self.parameters[name] = p
-
+            self.parameters[name] = p_class._preprocessParameters(self.parameters)
             self.parameter_key = self.parameters.hash(name)
 
             h = hashlib.md5()
@@ -772,6 +765,7 @@ class PNode(object):
             # Clean out the heavy parts in light of everythin
             if not self.is_only_parameter_dependency:
                 self.common.deregisterPNode(self)
+                
                 self.module_dependencies.clear()
                 self.result_dependencies.clear()
                 self.parameter_dependencies.clear()

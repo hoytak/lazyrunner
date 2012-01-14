@@ -36,6 +36,24 @@ class PModule:
         return local_parameters
 
     @classmethod
+    def _preprocessParameters(cls, parameters):
+
+        pb = parameters[cls._name]
+
+        for t in [[], [pb], [pb,parameters]]:
+            try:
+                p = cls.preprocessParameters(*t)
+                break
+            except TypeError, te:
+
+                if "preprocessParameters" in str(te):
+                    continue
+                else:
+                    raise
+
+        return p if p is not None else parameters[cls._name]
+
+    @classmethod
     def _getDependencies(cls, parameters):
         
         def getDep(dep_type):
@@ -352,6 +370,7 @@ class PModule:
     def inCache(self, obj_name, key = None,
                 ignore_module = False,
                 ignore_local = False,
+                disk_writable = True,
                 ignore_dependencies = False):
         """
         Returns True if an object with key `obj_name` can be loaded
