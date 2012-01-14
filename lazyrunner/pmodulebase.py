@@ -92,7 +92,9 @@ class PModule:
                 if type(dependency_function) in [list, tuple, set, str]:
                     return process_dependency(dependency_function)
 
-                deps = None
+                null_ = "_null_"
+
+                deps = null_
                 
                 pb = parameters[cls._name]
                 
@@ -107,11 +109,11 @@ class PModule:
                         else:
                             raise
 
-                if deps is None:
-                    raise TypeError(("%s() must be a string, list, tuple, set or "
+                if deps is null_:
+                    raise TypeError(("%s() for %s must be a string, list, tuple, set or "
                                      "take either no parameters, the local parameter "
                                      "tree, ro the local and global parameter trees.")
-                                    % dep_attr)
+                                    % (dep_attr, cls._name))
 
                 
                 return process_dependency(deps)   
