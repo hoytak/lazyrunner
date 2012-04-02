@@ -648,6 +648,8 @@ class PNode(object):
                 
                 if not need_module:
                     return
+        else:
+            have_loaded_results = self.results_container.objectIsLoaded()
 
         # Okay, not done yet
 
