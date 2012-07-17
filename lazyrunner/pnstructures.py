@@ -648,6 +648,8 @@ class PNode(object):
                 
                 if not need_module:
                     return
+        else:
+            have_loaded_results = True
 
         # Okay, not done yet
 
