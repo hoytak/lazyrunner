@@ -47,7 +47,7 @@ class Manager(object):
     def getResults(self, parameters, names):
         common = PNodeCommon(self)
         r = common.getResults(parameters, names)
-        common._debug_referencesDone()
+        # common._debug_referencesDone()
         return r
     
     def _loadFromDisk(self, container):
