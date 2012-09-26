@@ -556,7 +556,7 @@ class PModule:
         
     def getResults(self, r):
         """
-        Returns the results from 
+        Returns the results from r 
         """
 
         return self._pnode.getSpecific("results", r)
