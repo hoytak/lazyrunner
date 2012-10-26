@@ -1,7 +1,7 @@
 """
 Process the config file.
 """
-from exceptions import ConfigError
+from ..exceptions import ConfigError
 from utils import loadModule, checkType, checkValue
 from os.path import exists, join, split, abspath, isdir, normpath, relpath
 from itertools import chain
@@ -14,13 +14,13 @@ is_boolean = set([True, False])
 config_extract_module_file_load = \
     re.compile(r"config\.additional_source_files\.append\([\"'](?P<sourcefile>[\w\./]+)[\"']\)")
 
-def configFilename(base_dir, opttree):
+def configFilename(opttree):
     config_module_name = opttree.config_module_name
-    return join(base_dir, config_module_name + ".py")
+    return join(opttree.project_directory, config_module_name + ".py")
 
-def parseConfigAutoSection(base_dir, opttree):
+def parseConfigAutoSection(opttree):
 
-    config_filename = configFilename(base_dir, opttree)
+    config_filename = configFilename(opttree)
     config_f = open(config_filename)
 
     config_list = [(i, l) for i, l in
@@ -51,7 +51,7 @@ def parseConfigAutoSection(base_dir, opttree):
             if m is None:
                 raise ConfigError("Parse Error in line %d of %s" % (i+1, config_filename))
 
-            source_file = join(base_dir, m.group("sourcefile"))
+            source_file = join(opttree.project_directory, m.group("sourcefile"))
 
             if exists(source_file):
                 t.autoload.source_files.append(source_file)
@@ -73,9 +73,9 @@ def parseConfigAutoSection(base_dir, opttree):
     return t
 
 
-def addSourceFileToAutoLoad(base_dir, opttree, sourcefile):
+def addSourceFileToAutoLoad(opttree, sourcefile):
 
-    config_f = open(configFilename(base_dir, opttree), 'a')
+    config_f = open(configFilename(opttree), 'a')
 
     config_f.seek(0, os.SEEK_END)
 
@@ -85,7 +85,7 @@ def addSourceFileToAutoLoad(base_dir, opttree, sourcefile):
 
 config_info = None
 
-def loadConfigInformation(base_dir, opttree):
+def loadConfigInformation(opttree):
     " Both loads and validates the config file."
 
     global config_info
@@ -97,16 +97,16 @@ def loadConfigInformation(base_dir, opttree):
     # make sure everything holds together there
 
     config_module_name = opttree.config_module_name
-    config_filename = configFilename(base_dir, opttree)
+    config_filename = configFilename(opttree)
     
     try:
-        cm = loadModule(base_dir, config_module_name)
+        cm = loadModule(opttree.project_directory, config_module_name)
     except ImportError:
         raise ConfigError("Error loading '%s.py'; not in an initialized directory?"
                           %  config_module_name)
 
     # Run a bunch of checks on the config file
-    auto_t = parseConfigAutoSection(base_dir, opttree)
+    auto_t = parseConfigAutoSection(opttree)
 
     cp = cm.config
 
@@ -119,7 +119,7 @@ def loadConfigInformation(base_dir, opttree):
         checkType(cp[n], required_types, "config.%s" % n)
 
     def normdir(d):
-        d = normpath(relpath(base_dir, d))
+        d = normpath(relpath(opttree.project_directory, d))
         if d.endswith('/'):
             return d[:-1]
         else:
@@ -136,8 +136,8 @@ def loadConfigInformation(base_dir, opttree):
     cython_files = set()
 
     def process_import(m):
-        mf = join(base_dir, m)
-        mf2 = join(base_dir, m.replace('.', '/'))
+        mf = join(opttree.project_directory, m)
+        mf2 = join(opttree.project_directory, m.replace('.', '/'))
 
         if mf2.endswith('/pyx'):
             mf2 = mf2[:-4] + ".pyx"
@@ -186,7 +186,7 @@ def loadConfigInformation(base_dir, opttree):
     # Recursively go through and add in directories with an __init__.py file
     if cp.add_all_with_init_file:
 
-        for dirpath, dirnames, filenames in os.walk(base_dir, topdown=True,followlinks=True):
+        for dirpath, dirnames, filenames in os.walk(opttree.project_directory, topdown=True,followlinks=True):
             new_dirs = [dn for dn in dirnames if exists(join(dirpath, dn, '__init__.py'))]
             dirnames[:] = new_dirs
 
@@ -240,7 +240,7 @@ def loadConfigInformation(base_dir, opttree):
             raise ConfigError("'directory' parameter for cmake project '%s' not specified."
                              % ("cmake." + k))
 
-        b.directory = d = abspath(normpath(join(base_dir, b.directory)))
+        b.directory = d = abspath(normpath(join(opttree.project_directory, b.directory)))
 
         if not exists(d):
             raise ConfigError("Directory '%s' for cmake project '%s' does not exist." % (d,k))

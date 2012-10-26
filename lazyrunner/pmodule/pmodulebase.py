@@ -1,14 +1,8 @@
 from copy import deepcopy, copy
 import logging
 from treedict import TreeDict
-from pmodulelookup import getPModuleClass, isPModule
 import re
-from presets import applyPreset
-from pnstructures import _PNSpecBase
 from inspect import getargspec
-
-_key_processing_re = re.compile('[0-9a-zA-Z_]+').match
-
 from axisproxy import AxisProxy
     
 class PModule:
@@ -69,11 +63,11 @@ class PModule:
                 def clean(s):
                     if type(s) is str:
                         return s.strip().lower()
-                    elif not isinstance(s, _PNSpecBase):
+                    elif not getattr(s, "__parameter_container__", False):
                         wrong_type(s)
                     return s
                     
-                if type(dl) is str or isinstance(dl, _PNSpecBase):
+                if type(dl) is str or getattr(dl, "__parameter_container__", False):
                     s = [dl]
                 elif type(dl) in [list, tuple, set]:
                     s = list(dl)

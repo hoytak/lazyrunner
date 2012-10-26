@@ -1,4 +1,4 @@
-from exceptions import ConfigError
+from ..exceptions import ConfigError
 from config_processing import loadConfigInformation
 from copy import copy
 from itertools import chain, product
@@ -12,6 +12,8 @@ import re
 import ctypes
 import shutil
 import cleaning
+
+from utils import loadModule
 
 """
 Specifies the setup stuff 
@@ -75,7 +77,7 @@ def check_output(*popenargs, **kwargs):
     return output
 
 
-def readyCMakeProjects(base_dir, opttree, config):
+def readyCMakeProjects(opttree, config):
     """
     Compiles CMake Projects. 
     """
@@ -91,7 +93,7 @@ def readyCMakeProjects(base_dir, opttree, config):
             print "Compiling cmake projects.\n"
     
     for k, b in config.cmake.iteritems(recursive=False, branch_mode = "only"):
-        d = abspath(join(base_dir, b.directory))
+        d = abspath(join(opttree.project_directory, b.directory))
 
         if not exists(d):
             raise ConfigError("CMake subproject '%s' directory does not exist (%s)"
@@ -172,7 +174,7 @@ def readyCMakeProjects(base_dir, opttree, config):
         print "Done compiling and loading cmake library projects."
         print "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n"
         
-def runBuildExt(base_dir, opttree, config):
+def runBuildExt(opttree, config):
     """
     Sets up and runs the python build_ext setup configuration.
     """
@@ -268,7 +270,7 @@ def runBuildExt(base_dir, opttree, config):
     
     for f in cython_files:
         # extract the module names 
-        rel_f = relpath(f, base_dir)
+        rel_f = relpath(f, opttree.project_directory)
         assert rel_f.endswith('.pyx')
         modname = rel_f[:-4].replace('/', '.')
 
@@ -330,9 +332,14 @@ def runBuildExt(base_dir, opttree, config):
 
     sys.argv = old_argv
 
-def setup(base_dir, opttree, config):
+def resetAndInitModules(opttree, config):
     "The main setup function; calls the rest."
-    readyCMakeProjects(base_dir, opttree, config)
-    runBuildExt(base_dir, opttree, config)
+    readyCMakeProjects(opttree, config)
+    runBuildExt(opttree, config)
 
+    for m in config.modules_to_import:
+	if opttree.verbose_mode:
+	    print "Loading module '%s' in directory '%s'" % (m, opttree.project_directory)
+	    
+	loadModule(opttree.project_directory, m)
 

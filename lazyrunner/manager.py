@@ -5,116 +5,142 @@ A class that manages a batch of sessions.
 import time, logging, sys
 from diskio import *
 from os import makedirs, remove
-from os.path import join, expanduser, exists, split, abspath
+from os.path import join, expanduser, exists, split, abspath, normpath
 from treedict import TreeDict
 from pnstructures import PNodeCommon, PNode
+
+import parameters
+import pmodule
+import loading
+
+def _setupOptTree(opttree):
+    default_opttree = TreeDict()
         
-class Manager(object):
+    default_opttree.debug_mode = False
+    default_opttree.project_directory = '.'
+    default_opttree.debug_mode = False
+    default_opttree.verbose = False
+    default_opttree.no_cache = False
+    default_opttree.force = False
+    default_opttree.cache_read_only = False
+    default_opttree.cache_directory = None
+    default_opttree.no_compile = False
+    default_opttree.config_module = 'conf'
+    default_opttree.settings_module = 'settings.defaults'
+
+    if not type(opttree) is TreeDict:
+        raise TypeError("LazyRunner class must be initialized with a TreeDict of options.")
+
+    opttree = opttree.copy()
+        
+    opttree.update(default_opttree, overwrite_existing = False)
+
+    opttree.project_directory = normpath(abspath(expanduser(opttree.project_directory)))
+
+    return opttree
+
+def clean(opttree):
+    opttree = _setupOptTree(opttree)
+    config = loading.loadConfigInformation(opttree)
+
+    loading.cleanAll(opttree, config)
+        
+class RunManager(object):
     """
-    The command and control center for coordinating the sessions.
-    
-    The main aspect of this is caching, which is implemented by
-    storing the elements of the cache in files named the hash of their
-    parameters.
+    A class providing an API for interfacing directly with a
+    lazyrunner project.  
     """
 
-    def __init__(self, manager_params):
+    def __init__(self, opttree):
+        """
+        Initializes a lazyrunner environment.  The environment options
+        are identical to those on the command line.
+                 
+        project_directory = '.',
+        debug_mode = False, 
+        verbose = False,
+        no_cache = False, 
+        force = False,
+        cache_read_only = False, 
+        cache_directory = None,
+        no_compile = False, 
+        config_module = 'conf',
+        settings_module = 'settings.defaults'
+        
+        """
 
-        self.manager_params = mp = manager_params
+            
+        sys.path.append(opttree.project_directory)
+
+        self.opttree = opttree
+        self.config = loading.loadConfigInformation(opttree)
+
+        ################################################################################
+        # Now set up all the logger options
 
         self.log = logging.getLogger("Manager")
+        
+        if  normpath(abspath(expanduser(os.getcwd()))) != opttree.project_directory:
+            self.log.info("Using '%s' as project directory." % opttree.project_directory)
 
-        # set up the result cache
-        if "cache_directory" in mp and mp.cache_directory is not None:
-            
-            self.log.info("Using cache directory '%s'" % mp.cache_directory)
-
-            self.cache_directory = expanduser(mp.cache_directory)
-            self.disk_read_enabled = True
-            self.disk_write_enabled = not mp.cache_read_only
-        else:
-            self.disk_read_enabled = False
-            self.disk_write_enabled = False
-            self.log.info("Not using disk cache.")
-
-    def run(self, parameters, final_modules = None):
-
-        if final_modules is None:
-            final_modules = parameters.run_queue
-
-        return self.getResults(parameters, final_modules)
-    
-    def getResults(self, parameters, names):
-        common = PNodeCommon(self)
-        r = common.getResults(parameters, names)
-        # common._debug_referencesDone()
-        return r
-    
-    def _loadFromDisk(self, container):
-
-        if not container.isDiskWritable():
-            return
-
-        if self.disk_read_enabled:
-            filename = abspath(join(self.cache_directory, container.getFilename()))
-
-            self.log.debug("Trying to load %s from %s" % (container.getKeyAsString(), filename))
-
-            if exists(filename):
-                try:
-                    pt = loadResults(filename)
-                except Exception, e:
-                    self.log.error("Exception Raised while loading %s: \n%s"
-                                   % (filename, str(e)))
-                    pt = None
-                    
-                if pt is not None:
-
-                    self.log.debug("--> Object successfully loaded.")
-    
-                    if (pt.treeName() == "__ValueWrapper__"
-                        and pt.size() == 1
-                        and "value" in pt):
-                    
-                        container.setObject(pt.value)
-                    else:
-                        container.setObject(pt)
-                        
-                    return
+            # Configure the cache directory
+            if opttree.cache_directory is None:
+                cache_directory = config.cache_directory
+                
             else:
-                self.log.debug("--> File does not exist.")
-
-        if self.disk_write_enabled and container.isDiskWritable():
-            container.setObjectSaveHook(self._saveToDisk)
-
-    def _saveToDisk(self, container):
-
-        assert self.disk_write_enabled and container.isDiskWritable()
-
-        filename = join(self.cache_directory, container.getFilename())
-        directory = split(filename)[0]
-        obj = container.getObject()
-
-        self.log.debug("Saving object  %s to   %s." % (container.getKeyAsString(), filename))
-
-            # Make sure it exists
-        if not exists(directory):
-            makedirs(directory)
-
-        if type(obj) is not TreeDict:
-            pt = TreeDict("__ValueWrapper__", value = obj)
-        else:
-            pt = obj
-
-        try:
-            saveResults(filename, pt)
-
-            assert exists(filename)
+                cache_directory = opttree.cache_directory
+                
+            cache_read_only = opttree.cache_read_only
+        
+            if opttree.no_cache:
+                cache_directory = None
+    
+            # set up the result cache
+            if cache_directory is not None:
+                
+                self.log.info("Using cache directory '%s'" % cache_directory)
+    
+                self.cache_directory = expanduser(cache_directory)
+                self.disk_read_enabled = True
+                self.disk_write_enabled = not cache_read_only
+            else:
+                self.disk_read_enabled = False
+                self.disk_write_enabled = False
+                self.log.info("Not using disk cache.")
             
-        except Exception, e:
-            self.log.error("Exception raised attempting to save object to cache: \n%s" % str(e))
-
-            try:
-                remove(filename)
-            except Exception:
-                pass
+        ################################################################################
+        # Init all the module lookup stuff
+        
+        pmodule.resetAndInitialize()
+        parameters.resetAndInitialize()
+        
+        loading.resetAndInitModules(self.opttree, self.config)
+                
+        parameters.finalize()
+        pmodule.finalize()
+    
+    ########################################################################################
+    # General Control Functions
+    
+    def run(self, presets):
+        
+        ptree = parameters.getParameterTree(*presets)
+        final_modules = pmodule.getCurrentRunQueue()
+    
+        return self.getResults(ptree, final_modules)
+    
+    def getResults(self, ptree, modules):
+                
+        common = PNodeCommon(self.opttree)
+        
+        results = common.getResults(ptree, modules)
+        
+        return dict(zip(results, modules)) 
+    
+    def getPresetHelp(self, width = None):
+        return '\n'.join(parameters.getPresetHelpList(width = width))
+    
+    def updatePresetCompletionCache(self, preset_name_cache_file):
+        parameters.presets.updatePresetCompletionCache(preset_name_cache_file)
+            
+     

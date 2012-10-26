@@ -18,7 +18,7 @@ config = TreeDict("configuration")
 # appended to this list in the AutoStart section below.
 #
 
-config.import_list      = ['settings', 'test_param']
+config.import_list      = []
 
 # If this is true, automatically add all the subdirectories having an
 # __init__ file and all the local files (except conf.py) with a .py or
@@ -27,8 +27,8 @@ config.import_list      = ['settings', 'test_param']
 config.auto_import  = True
 
 # Debug mode turns on debug options in compiling code and prints
-# diagnostic info during the configuration.
-config.debug_mode              = True
+# diagnostic info during the configuration. 
+config.debug_mode              = False
 
 # The location for the cache.  If None, cache is disabled.
 config.cache_directory         = None

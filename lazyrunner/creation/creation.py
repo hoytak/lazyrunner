@@ -176,13 +176,10 @@ config.setdefault(\"import_list\", [])
 
 """
 
-def createInitial(base_dir, opttree):
+def createInitial(opttree):
 
     # Okay, go for it
     d = {}
-
-    settings_dir = d["settings_dir"] = \
-                   join(base_dir, opttree.get("settings_dir", "settings"))
 
     defaults_module_name = d["defaults_module_name"] = \
                    opttree.get("defaults_module_name", "defaults").replace(".py", "")
@@ -197,7 +194,7 @@ def createInitial(base_dir, opttree):
     defaults_file = join(settings_dir, defaults_module_name + ".py")
     init_file     = join(settings_dir, "__init__.py")
     presets_file  = join(settings_dir, presets_module_name + ".py")
-    config_file   = join(base_dir,     config_module_name + ".py")
+    config_file   = join(opttree.project_directory,     config_module_name + ".py")
 
     fl = [
         (config_file,   config_file_template % d),
@@ -266,7 +263,7 @@ class %(module_name)s(PModule):
         pass
 """
 
-def createNewModule(base_dir, opttree, module):
+def createNewModule(opttree, module):
 
     d = {}
 
@@ -274,7 +271,7 @@ def createNewModule(base_dir, opttree, module):
     module_name = d["module_name"]  = module_names[-1]
     directories  = module_names[:-1]
 
-    module_file = join(base_dir, *(directories + [module_name.lower() + ".py"]))
+    module_file = join(opttree.project_directory, *(directories + [module_name.lower() + ".py"]))
 
     print "Writing a new module '%s' to file '%s'" % (module_name, module_file)
 

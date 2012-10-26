@@ -1,95 +1,10 @@
 from treedict import TreeDict
-from presets import applyPreset
+from parameters import applyPreset
 from collections import defaultdict
 from os.path import join
-from pmodulelookup import *
 import hashlib, base64, weakref, sys, gc
 from itertools import chain
-
-################################################################################
-
-class _PNSpecBase(object):
-    pass
-
-class Direct(_PNSpecBase):
-
-    def __init__(self, name):
-        self.name = name.lower()
-
-    def _getParameters(self, raw_parameters):
-        return raw_parameters
-
-    def _getLoadName(self):
-        return self.name
-    
-class Delta(_PNSpecBase):
-    """
-    Encodes a change to the current parameter tree and some
-    results/module coming from that change.
-
-    `Delta` is initialized with 1 required parameter and 4 optional
-    parameters.  `p_name` is required and gives the module name of the
-    results or module requested.  `local_delta` is a TreeDict instanc   e
-    that is applied to the parameter tree branch of the parameter tree
-    corresponding to the requested dependency.  All the parameters
-    present in the default parameter tree but not present in the given
-    one are imported from the default.  Thus it is only necessary to
-    specify modified parameters.
-
-    If additional parts beyond the requested result/module branch need
-    to be changed from the default, they can be specified using
-    `delta`.  This has the same behavior as `local_delta`, except that
-    modifications are specified from the root of the parameter tree
-    rather than the branch associated with `p_name`.
-
-    Alternatively, presets to be applied to the full parameter
-    tree may be passed in using `apply_preset`.  `apply_preset`,
-    if given, must be a single preset name or a list of valid
-    preset names.  If a list, they are applied in order.
-
-    Finally, if instances of `Delta` are used to specify result or
-    module dependency, then `name` can be given to specify how that
-    result can be accessed from the `results` or `modules` attribute
-    in a processing module.  For example, specifying ``name = "sol_alt"``
-     for the result dependencies causes these results to show up in
-    ``self.results.sol_alt``.
-    """
- 
-    def __init__(self, p_name, local_delta = None, delta = None, apply_preset = None, name = None):
-
-        self.name = p_name.lower().strip()
-        self.local_delta = local_delta
-        self.delta = delta
-        self.apply_preset = apply_preset
-        self.load_name = name
-
-    def _getParameters(self, raw_parameters):
-
-        # First make a copy of the full parameter tree.
-        pt = raw_parameters.copy()
-
-        if self.delta is not None:
-            pt.update(self.delta, protect_structure=False)
-
-        if self.local_delta is not None:
-            pt.makeBranch(self.name)
-            pt[self.name].update(self.local_delta, protect_structure=False)
-
-        if self.apply_preset is not None:
-            if type(self.apply_preset) is str:
-                applyPreset(pt, self.apply_preset)
-            elif type(self.apply_preset) is list or type(self.apply_preset) is tuple:
-                applyPreset(pt, *self.apply_preset)
-            else:
-                raise TypeError("apply_preset must be either string, list, or tuple (not %s)"
-                                % str(type(self.apply_preset)))
-        pt.run_queue = []
-
-        return pt
-
-    def _getLoadName(self):
-        return self.load_name
-
+from collections import namedtuple
 
 ################################################################################
 # Stuff to manage the cache
@@ -113,7 +28,7 @@ class PNodeModuleCacheContainer(object):
         self.__obj_is_loaded = False
         self.__disk_save_hook = None
         self.__non_persistent_hook = None
-
+	
     def getFilename(self):
 
         def v(t):
@@ -217,8 +132,10 @@ class _PNodeNonPersistentDeleter(object):
 # This class holds the runtime environment for the pnodes
 class PNodeCommon(object):
 
-    def __init__(self, manager):
-        self.manager = manager
+    def __init__(self, opttree):
+        self.opttree = opttree
+        
+        self.log = logging.getLogger("RunCTRL")
 
         # This is for node filtering, i.e. eliminating duplicates
         self.pnode_lookup = weakref.WeakValueDictionary()
@@ -226,11 +143,13 @@ class PNodeCommon(object):
         self.non_persistant_pointer_lookup = weakref.WeakValueDictionary()
         self.non_persistant_deleter = _PNodeNonPersistentDeleter(self)
 
-        # This is for cache lootup
+        # This is for local cache lootup
         self.cache_lookup = defaultdict(PNodeModuleCache)
-        
 
     def getResults(self, parameters, names):
+
+        if type(names) is str:
+            names = [names]
 
         def getPN(n):
             if type(n) is not str:
@@ -239,21 +158,18 @@ class PNodeCommon(object):
             pn = PNode(self, parameters, n, 'results')
             pn.initialize()
             
-            # assert sys.getrefcount(pn) == 2, sys.getrefcount(pn)
-            
             pn = self.registerPNode(pn)
             pn.increaseParameterReference()
             pn.increaseResultReference()
+
             return pn
         
-        if type(names) is str:
-            r = getPN(names).pullUpToResults()[-1]
-        elif type(names) in [list, tuple]:
-            r = [getPN(n).pullUpToResults()[-1] for n in names]
-        else:
-            raise TypeError("Names must be a string or list/tuple of strings.")
+        pn_list = [getPN(n) for n in names]
+        
+        assert len(set(id(pn) for pn in pn_list)) == len(set(names))
 
-        return r
+        return [pn.pullUpToResults().result for pn in pn_list]
+    
         
     def registerPNode(self, pn):
 
@@ -349,9 +265,81 @@ class PNodeCommon(object):
                 container.setNonPersistentObjectSaveHook(self.non_persistant_deleter)
 
         # now see if it can be loaded from disk
-        self.manager._loadFromDisk(container)
+        self._loadFromDisk(container)
 
         return container
+
+    
+    def _loadFromDisk(self, container):
+
+        if not container.isDiskWritable():
+            return
+
+        if self.disk_read_enabled:
+            filename = abspath(join(self.cache_directory, container.getFilename()))
+
+            self.log.debug("Trying to load %s from %s" % (container.getKeyAsString(), filename))
+
+            if exists(filename):
+                try:
+                    pt = loadResults(filename)
+                except Exception, e:
+                    self.log.error("Exception Raised while loading %s: \n%s"
+                                   % (filename, str(e)))
+                    pt = None
+                    
+                if pt is not None:
+
+                    self.log.debug("--> Object successfully loaded.")
+    
+                    if (pt.treeName() == "__ValueWrapper__"
+                        and pt.size() == 1
+                        and "value" in pt):
+                    
+                        container.setObject(pt.value)
+                    else:
+                        container.setObject(pt)
+                        
+                    return
+            else:
+                self.log.debug("--> File does not exist.")
+
+        if self.disk_write_enabled and container.isDiskWritable():
+            container.setObjectSaveHook(self._saveToDisk)
+
+    def _saveToDisk(self, container):
+
+        assert self.disk_write_enabled and container.isDiskWritable()
+
+        filename = join(self.cache_directory, container.getFilename())
+        directory = split(filename)[0]
+        obj = container.getObject()
+
+        self.log.debug("Saving object  %s to   %s." % (container.getKeyAsString(), filename))
+
+            # Make sure it exists
+        if not exists(directory):
+            makedirs(directory)
+
+        if type(obj) is not TreeDict:
+            pt = TreeDict("__ValueWrapper__", value = obj)
+        else:
+            pt = obj
+
+        try:
+            saveResults(filename, pt)
+
+            assert exists(filename)
+            
+        except Exception, e:
+            self.log.error("Exception raised attempting to save object to cache: \n%s" % str(e))
+
+            try:
+                remove(filename)
+            except Exception:
+                pass
+
+
 
     def _debug_referencesDone(self):
         import gc
@@ -411,6 +399,9 @@ class PNodeCommon(object):
                           pn.local_key, pn.dependency_key))
 
 _Null = "null"
+
+_PulledResult     = namedtuple('PulledResult',     ['parameters', 'result'])
+_PulledModule     = namedtuple('PulledModule',     ['parameters', 'result', 'module'])
 
 class PNode(object):
 
@@ -499,7 +490,7 @@ class PNode(object):
                     for se in s:
                         add(se, parameters, first_order, name_override)
 
-                elif isinstance(s, _PNSpecBase):
+                elif getattr(s, "__parameter_containe__", False):
                     add(s.name, s._getParameters(parameters), False, s._getLoadName())
                 else:
                     raise TypeError("Dependency type not recognized.")
@@ -857,7 +848,7 @@ class PNode(object):
             
         r = self.results_container.getObject()
 
-        ret = (self.parameters[self.name], r)
+        ret = _PulledResult(self.parameters[self.name], r)
 
         rc = self.results_container
         
@@ -878,7 +869,7 @@ class PNode(object):
 
         self._reportResults(r)
         
-        ret = (self.parameters[self.name], r, self.module)
+        ret = _PulledModule(self.parameters[self.name], r, self.module)
 
         self.increaseModuleAccessCount()
         
@@ -913,14 +904,14 @@ class PNode(object):
             ptree = self.parameters
             key = self.full_key
             
-        elif isinstance(r, _PNSpecBase):
+        elif getattr(r, "__parameter_container__", False):
             name = r.name
             ptree = r._getParameters(self.parameters)
             key = ptree.hash()
             
         else:
             raise TypeError("Requested %s must be specified as a string or "
-                            "as an instance of a _PNSpecBase class like 'Delta'.")
+                            "a parameter container class like 'Delta'.")
 
         return name, ptree, key
         
@@ -958,7 +949,7 @@ class PNode(object):
             else:
                 self.additional_module_nodes_accessed = [pn]
 
-            return pn.pullUpToModule()[-1]
+            return pn.pullUpToModule().module
 
         else:
             assert False

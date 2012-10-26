@@ -40,25 +40,28 @@ def clean_cython_file(opttree, config, f):
     silent_remove(opttree, config, cf)
     silent_remove(opttree, config, f[:-4] + ".so")
 
-def clean_pyc_files(opttree, config, base_dir):
-    for dirpath, dirnames, filenames in os.walk(base_dir):
+def clean_pyc_files(opttree, config):
+    for dirpath, dirnames, filenames in os.walk(opttree.project_directory):
         for fn in filenames:
             if fn.endswith(".pyc"):
-                silent_remove(opttree, config, join(base_dir, dirpath, fn))
+                silent_remove(opttree, config, join(opttree.project_directory, dirpath, fn))
                 
     
-def cleanAll(opttree, config, base_dir):
+def cleanAll(opttree, config):
 
-    print "Cleaning generated cython files."
+    log = logging.getLogger("CTRL")
+
+    log.info("Cleaning generated cython files.")
     
     for f in config.cython_files:
+        log.debug("Cython: Cleaning %s." % f) 
         clean_cython_file(opttree, config, f)
 
-    print "Cleaning cached cmake files."
+    log.info("Cleaning cached cmake files.")
 
     for b in config.cmake.iterbranches():
+        log.debug("CMake: Cleaning %s." % b.directory) 
         clean_cmake_project(opttree, config, b)
         
-    print "Cleaning old python .pyc files."
-
-    clean_pyc_files(opttree, config, base_dir)
+    log.info("Cleaning old python .pyc files.")
+    clean_pyc_files(opttree, config)

@@ -1,130 +1,171 @@
 """
-The control base for the preset parameter definitions.
+The central place for handling parameters.
 """
 
 from treedict import TreeDict
+from collections import namedtuple
 import sys, textwrap
 import re
 import warnings
 import os, struct
+import inspect
 from os.path import commonprefix
+from common import cleanedPreset, checkNameValidity, combineNames
+from parameters import globalDefaultTree, getDefaultTree
+from context import getCurrentContext, ensureValidPModuleContext, PresetContext
 
 ################################################################################
-# A few quick functions
+# Stuff for keeping track of the parameter tree
 
-name_validator = re.compile(r"\A([a-zA-Z_]\w*)(\.[a-zA-Z_]\w*)*\Z")
+def defaults():
+    """
+    The primary way for setting the default parameters in a tree.
 
-def checkNameValidity(n):
-    global name_validator
+    """
+    
+    return TreeDict('Default_Parameter_Tree', __defaultpresettree__ = True)
 
-    if n is not None:
-        if type(n) is not str:
-            raise TypeError("Name/prefix/branch must be string.")
-        elif name_validator.match(n) is None:
-            raise NameError("'%s' not a valid preset tag/name." % n)
 
 ################################################################################
 # Global variables that hold the lookup tables
 
-_preset_lookup = TreeDict('presets')
-_preset_description_lookup = TreeDict('preset_descriptions')
-_preset_keyset = set()
-_preset_lookup_by_id = {}
+__preset_staging = None
+__preset_lookup = None
+__preset_description_lookup = None
+__preset_tree = None
 
 ################################################################################
-# The current context is largely used by with statements to ensure
-# that the current context supports it
+# Functions for pulling out the presets from a PModule
 
-_preset_context_stack = []
+def processPModule(pm):
 
-class _PresetContext(object):
+    global __default_tree
 
-    # When initializing a context, it is always parameters of interest 
-    def __init__(self, prefix = None, branch = None, description = None, apply = None):
+    attr_dict = dict(inspect.getmembers(pm))
 
-        global _preset_context_stack
-        global _combine
+    for k, t in attr_dict.iteritems():
+        if id(t) in __preset_staging:
+                    
+            if type(t) is TreeDict and t.get("__defaultpresettree__", False):
+                parameters.modifyDefaultTree(pm.name(), t)
+            else:
+                __preset_staging[id(t)]._prependPModuleContext(pm.name())
 
-        if prefix is not None:
-            prefix = prefix.lower()
-            
-        if branch is not None:
-            branch = branch.lower()
+    
+############################################################
+# A container for holding the preset
+
+class _PresetWrapper:
+
+    def __init__(self, name, branch, action, description, apply, arguments):
+        self.name = name
+        self.branch = branch
+        self.action = action
+        self.description = description
+        self.apply = apply
+        self.arguments = arguments
         
-        checkNameValidity(prefix)
-        checkNameValidity(branch)
+        assert isinstance(arguments, list)
 
-        if _preset_context_stack:
-            context = _preset_context_stack[-1]
+    def __call__(self, ptree, list_args, argdict):
 
-            self.prefix = _combine(context.prefix, prefix)
-            self.branch = _combine(context.branch, branch)
-            self.apply  = [l for l in context.apply]
+        assert type(list_args) is list
+        assert type(argdict) is dict
+
+        if self.apply:
+            for ap in self.apply:
+                if type(ap) is dict:
+                    for k, v in ap.iteritems():
+                        ptree[k] = v
+                        
+                elif type(ap) is str:
+                    applyPreset(ap, ptree)
+                    
+                elif callable(ap):
+                    args, varargs, keywords, defaults = inspect.getargspec(ap)
+                    
+                    if len(args) == 1:
+                        ap(ptree)
+                    else:
+                        raise TypeError("Functions in apply list can only take one argument.")
+                else:
+                    raise TypeError("Incorrect type in apply list.")
+
+        if self.branch is not None:
+            ptree = ptree.makeBranch(self.branch, False)
+            if type(ptree) is not TreeDict:
+                raise TypeError("Requested branch '%' for preset '%s' not a branch."
+                                % (self.branch, self.name))
+            
+        if type(self.action) is TreeDict:
+            if argdict:
+                raise ValueError("Cannot pass keyword arguments to a preset defined as a Tree.")
+            
+            ptree.update(self.action)
             
         else:
-            self.prefix = prefix
-            self.branch = branch
-            self.apply = []
-
-        # Update the apply
-        if apply is not None:
-            def addToCurrentStack(ap):
-
-                if type(ap) is dict or type(ap) is TreeDict:
-                    d = {}
-                    for k, v in ap.iteritems():
-                        checkNameValidity(k)
-                        d[_combine(self.branch, k)] = v
-                        
-                    self.apply.append(d)
-                    
-                elif type(ap) is str:
-                    self.apply.append(ap)
-
-                elif type(ap) is list or type(ap) is tuple:
-                    for v in ap:
-                        addToCurrentStack(v)
-                        
-                else:
-                    raise TypeError("Argument types to apply() must be dict, TreeDict, "
-                                    "a preset name (string), or a list/tuple of these.")
+            assert type(list_args) is list
+        
+            if len(self.arguments) < list_args:
+                raise TypeError("Preset %s takes fewer arguments than is given." % self.name)
                 
-            addToCurrentStack(apply)
+            args = self.arguments[len(list_args):]
+            
+            leftover_arguments = set(argdict.iterkeys()) - set(a for a, info in args)
+            
+            if leftover_arguments:
+                raise ValueError("Keyword arguments %s do not match preset arguments %s."
+                                 % ((','.join(sorted(leftover_arguments))), 
+                                    (','.join(a for a, info in args))))
+            
+            call_dict = dict(args) 
+            call_dict.update(argdict)
+                    
+                    
+            def parseArgument(a): 
+                
+                try:
+                    return int(a)
+                except TypeError:
+                    try:
+                        return float(a)
+                    except TypeError:
+                        return a
+                
+                    
+            self.action(ptree, *[parseArgument(a) for a in list_args], 
+                        **dict( (k, parseArgument(a)) for k, a in call_dict.iteritems()))
 
-        if self.prefix is not None and description is not None:
-            registerPrefixDescription(self.prefix, description, ignore_context = True)
+    def _prependPModuleContext(self, n):
+        self.name = combineNames(n, self.name)
+        self.branch = combineNames(n, self.branch)
 
-    # Called when used as a decorator; registers the function
-    def __call__(self, f):
-        name = f.__name__
-        registerPreset(_combine(self.prefix, name), f, branch = self.branch,
-                       apply = self.apply, ignore_context = True)
-
-    # The functionality for a with statement
-    def __enter__(self):
-        global _preset_context_stack
-
-        _preset_context_stack.append(self)
-        return self
-
-    def __exit__(self, type, value, traceback):
-        global _preset_context_stack
-
-        assert _preset_context_stack[-1] is self
-        _preset_context_stack.pop()
-
-_preset_context_stack.append(_PresetContext(None, None, None))
-
-class BadPreset(Exception): pass
 
 ################################################################################
 # Registering and looking up available presets
 
 def __presetTreeName(n):
-    return n.lower() + ".__preset__"
+    if type(n) is str:
+        return n.lower() + ".__preset__"
+    elif type(n) is tuple:
+        assert type(n[0]) is str
+        return n[0].lower() + ".__preset__"
+    else:
+        raise TypeError
 
 def __cleanPresetTreeName(n):
     return n.replace('.__preset__', "")
+
+def resetAndInitPresets():
+    global __preset_staging
+    global __preset_lookup
+    global __preset_description_lookup
+    global __preset_tree
+
+    __preset_staging = {}
+    __preset_lookup = {}
+    __preset_description_lookup = TreeDict('preset_descriptions')
+    __preset_tree = None
 
 def registerPreset(name, preset, branch = None, description = None,
                    apply = [], ignore_context = False):
@@ -153,16 +194,14 @@ def registerPreset(name, preset, branch = None, description = None,
     automatically.
     """
 
-    global _preset_context_stack
-
     checkNameValidity(name)
     checkNameValidity(branch)
 
     if not ignore_context:
-        context = _preset_context_stack[-1]
-        name   = _combine(context.prefix, name)
-        branch = _combine(context.branch, branch)
-        apply = context.apply
+        ctx    = getCurrentContext()
+        name   = combineNames(ctx.prefix, name)
+        branch = combineNames(ctx.branch, branch)
+        apply = ctx.apply
 
     # Get the description
     if description is None:
@@ -179,23 +218,65 @@ def registerPreset(name, preset, branch = None, description = None,
     description = re.sub(r"\s+", " ", d)
 
     # Checks to make sure it's gonna work later on
-    if type(preset) is not TreeDict and not callable(preset):
-        raise TypeError("Preset '%s' must be callable" % name)
+    if type(preset) is not TreeDict: 
+        
+        if not callable(preset):
+            raise TypeError("Preset '%s' must be TreeDict or callable with parameter tree." % name)
 
-    # See if it's multiply defined; issue a warning if so
-    preset_tree_name = __presetTreeName(name)
-    
-    if preset_tree_name in _preset_keyset:
-        pw = _preset_lookup[preset_tree_name]
+        args, varargs, keywords, defaults = inspect.getargspec(preset)
 
-        if pw.action != preset:
-            warnings.warn("Possible duplicate preset '%s'; ignoring second." % name)
+        if len(args) == 0:
+            raise TypeError("Callable preset '%s' must take parameter tree as argument." % name)
             
+        preset_args = args[1:]
+        
+        if len(preset_args) != 0 and (defaults is None or len(defaults) != len(preset_args)):
+            raise TypeError("Additional preset arguments in '%s' must have defaults, with type dictating allowable type for argument." % name)
+
+        if varargs is not None:
+            raise TypeError("Additional preset arguments in '%s' cannot be given by var arg '%s'"
+                            % (name, varargs))
+        
+        if keywords is not None:
+            raise TypeError("Additional preset arguments in '%s' are not currently supported by generic kw args ('%s')."
+                            % (name, keywords))
+        
+        if preset_args:
+            arguments = [(arg, (dflt, type(dflt) is str)) 
+                              for arg, dflt in zip(preset_args, defaults)]
+        else:
+            arguments = []
     else:
-        # Register it
-        _preset_lookup[preset_tree_name] = pw = _PresetWrapper(name, branch, preset, description, apply)
-        _preset_lookup_by_id[id(preset)] = (preset_tree_name, pw)
-        _preset_keyset.add(name.lower())
+        arguments = []
+        
+        
+    ########################################
+    # Register it in the staging area
+    __preset_staging[id(preset)] = _PresetWrapper(
+        name, branch, preset, description, apply, arguments)
+
+def finalizePresetLookup():
+
+    lookup = {}
+
+    for pw in __preset_staging.itervalues():
+
+        preset_tree_name = __presetTreeName(pw.name)
+
+        ret = lookup.setdefault(preset_tree_name, pw)
+
+        if ret is not pw:
+            if pw2.action is not pw.action:
+                warnings.warn( ("Possible duplicate preset name '%s'; \n "
+                                "  original in module '%s'; ignoring "
+                                "duplicate from module %s.")
+                               % (name, inspect.getmodule(pw2.action), inspect.getmodule(pw.action))
+                               )
+
+    # Give everything over to the main preset thing
+    assert __preset_lookup == {}
+    __preset_lookup.update(lookup)
+
 
 def registerPrefixDescription(prefix, description, ignore_context = False):
     """
@@ -207,21 +288,18 @@ def registerPrefixDescription(prefix, description, ignore_context = False):
     
     """
 
-    global _preset_lookup
-    global _preset_context_stack
-    global _preset_description_lookup
+    global __preset_description_lookup
 
     checkNameValidity(prefix)
 
     if not ignore_context:
-        context = _preset_context_stack[-1]
-        prefix = _combine(context.prefix, prefix)
+        prefix = combineNames(getCurrentContext().prefix, prefix)
 
     if prefix is None:
         raise ValueError("Either prefix must be given or "
                          "this must be called within a group context.")
 
-    _preset_description_lookup[prefix.lower() + ".__description__"] = \
+    __preset_description_lookup[prefix.lower() + ".__description__"] = \
          re.sub(r"\s+", " ", description)
     
     
@@ -297,11 +375,13 @@ def preset(prefix=None, branch = None, apply = None):
     """
 
     if type(prefix) is str or prefix is None:
-        return _PresetContext(prefix, branch, apply = apply)
+        return PresetContext(prefix, branch, apply = apply)
 
     else:
         f = prefix
         registerPreset(f.__name__, f, ignore_context = False)
+
+        return cleanedPreset(f)
 
 def presetTree(name, branch = None, description = None):
     """
@@ -342,12 +422,14 @@ def allPresets():
     Returns a list of all the currently registered presets.
     """
 
-    return [__cleanPresetTreeName(k) for k in _preset_lookup.keys()]
+    return [__cleanPresetTreeName(k) for k in __preset_lookup.keys()]
 
 ################################################################################
 # Applying the preset
 
-def applyPreset(*args):
+class BadPreset(Exception): pass
+
+def applyPreset(*args, **kwargs):
     """
     Applys one or more presets to a given parameter tree.  The
     arguments to `applyPreset` must be exactly one TreeDict instance
@@ -375,9 +457,8 @@ def applyPreset(*args):
     
     """
 
-    global _preset_lookup
-    global _preset_context_stack
-    global _preset_description_lookup
+    global __preset_lookup
+    global __preset_description_lookup
     
     preset_names = [n for n in args if type(n) is str]
     ptree_list = [t for t in args if type(t) is TreeDict]
@@ -397,77 +478,110 @@ def applyPreset(*args):
 
     for n in preset_names:
     
-        n = n.lower()
-
-        if n not in _preset_keyset:
-        
-            startwith_list = [__cleanPresetTreeName(k)
-                for k in _preset_lookup.iterkeys() if k.startswith(n)]
-
-            closest = [__cleanPresetTreeName(nc)
-                       for nc in _preset_lookup.getClosestKey(__presetTreeName(n), 5)]
-
-            for k in (set(closest) & set(startwith_list)):
-                closest.pop(closest.index(k))
-
-            print_list = startwith_list + closest
-
-            if print_list:
-                print "\nPreset '%s' not found; do you mean one of these?\n" % n
-
-                printPresetHelpList(print_list)
-
-                print ""
-
-            raise BadPreset("Bad preset value.")
+        try:
+            preset = __preset_lookup[__presetTreeName(n)]
+        except KeyError:
+            msgs = validatePresets(preset_names)
+            raise BadPreset('\n'.join( (("\n Preset '%s' not found; did you mean:\n " % pname)
+                                        + ('\n'.join(msg)) ))
+                            for (pname, msg) in msgs)
             
-        _preset_lookup[__presetTreeName(n)](ptree)
-
+        preset(ptree)
+                
     return True
 
-    
-############################################################
-# Now some preset containers for operating on portions of the tree
+################################################################################
+# Preset Context -- the mechanism behind the with group() statements
 
-class _PresetWrapper:
+_preset_context_stack = []
 
-    def __init__(self, name, branch, action, description, apply):
-        self.name = name
-        self.branch = branch
-        self.action = action
-        self.description = description
-        self.apply = apply
+class PresetContext(object):
 
-    def __call__(self, ptree):
+    register_preset_function = None
 
-        if self.apply:
-            for ap in self.apply:
-                if type(ap) is dict:
-                    for k, v in ap.iteritems():
-                        ptree[k] = v
-                        
-                elif type(ap) is str:
-                    applyPreset(ap, ptree)
-                    
-                else:
-                    raise TypeError("Incorrect type in apply list.")
+    # When initializing a context, it is always parameters of interest 
+    def __init__(self, prefix = None, branch = None, description = None, apply = None):
 
-        if self.branch is not None:
-            ptree.makeBranch(self.branch, False)
-            ptree = ptree[self.branch]
-            if type(ptree) is not TreeDict:
-                raise TypeError("Requested branch '%' for preset '%s' not a branch."
-                                % (self.branch, self.name))
+        global _preset_context_stack
+
+        if prefix is not None:
+            prefix = prefix.lower()
             
-        if type(self.action) is TreeDict:
-            ptree.update(self.action)
+        if branch is not None:
+            branch = branch.lower()
+        
+        checkNameValidity(prefix)
+        checkNameValidity(branch)
+
+        if _preset_context_stack:
+            context = _preset_context_stack[-1]
+
+            self.prefix = combineNames(context.prefix, prefix)
+            self.branch = combineNames(context.branch, branch)
+            self.apply  = [l for l in context.apply]
             
         else:
-            self.action(ptree)
+            self.prefix = prefix
+            self.branch = branch
+            self.apply = []
 
-    def _prependPModuleContext(self, n):
-        self.name = _combine(n, self.name)
-        self.branch = _combine(n, self.branch)
+        # Update the apply
+        if apply is not None:
+            def addToCurrentStack(ap):
+
+                if type(ap) is dict or type(ap) is TreeDict:
+                    d = {}
+                    for k, v in ap.iteritems():
+                        checkNameValidity(k)
+                        d[combineNames(self.branch, k)] = v
+                        
+                    self.apply.append(d)
+                    
+                elif type(ap) is str:
+                    self.apply.append(ap)
+
+                elif type(ap) is list or type(ap) is tuple:
+                    for v in ap:
+                        addToCurrentStack(v)
+                        
+                else:
+                    raise TypeError("Argument types to apply() must be dict, TreeDict, "
+                                    "a preset name (string), or a list/tuple of these.")
+                
+            addToCurrentStack(apply)
+
+        if self.prefix is not None and description is not None:
+            registerPrefixDescription(self.prefix, description, ignore_context = True)
+
+    # Called when used as a decorator; registers the function
+    def __call__(self, f):
+        name = f.__name__
+        registerPreset(combineNames(self.prefix, name), f, branch = self.branch,
+                       apply = self.apply, ignore_context = True)
+
+        return cleanedPreset(f)
+
+    # The functionality for a with statement
+    def __enter__(self):
+        global _preset_context_stack
+
+        _preset_context_stack.append(self)
+        return self
+
+    def __exit__(self, type, value, traceback):
+        global _preset_context_stack
+
+        assert _preset_context_stack[-1] is self
+        _preset_context_stack.pop()
+
+_preset_context_stack.append(PresetContext(None, None, None))
+
+def getCurrentContext():
+    return _preset_context_stack[-1]
+
+def ensureValidPModuleContext(pm):
+    if len(_preset_context_stack) > 1:
+        raise Exception("PModule '%s' cannot be defined within a prefix group." % pm.name())
 
 ################################################################################
 # Now, for the with statements, we can use the following:
@@ -609,38 +723,11 @@ def group(prefix = None, branch = None, description = None, apply = None):
 
     """
     
-    return _PresetContext(prefix, branch, description, apply)
-    
+    return PresetContext(prefix, branch, description, apply)
 
-################################################################################
-# A few helper functions that affect the parameter tree; used by
-# internal presets and external calls
-        
-def addToRunQueue(p, *modules):
-    """
-    Adds one or more modules to the queue of modules to be run in the
-    parameter tree `p`.  These are run in the order added, starting
-    with those (possibly) given in the default settings file.
-    """
-
-    p.setdefault('run_queue', [])
-    
-    for m in modules:
-        if type(m) is not str:
-            raise TypeError("Type of module in run queue must be str (not '%s')" % str(type(m)))
-            
-        p.run_queue.append(m.lower())
 
 ################################################################################
 # A few internal utility functions 
-
-def _combine(k1, k2):
-    if k1 is None:
-        return k2
-    elif k2 is None:
-        return k1
-    else:
-        return k1 + "." + k2
 
 def _getTerminalSize():
     """
@@ -680,26 +767,30 @@ def _getTerminalSize():
     return (25, 80)
 
 
-def printPresetHelpList(n_list = None):
+def getPresetHelpList(preset_list = None, width = None):
 
-    global _preset_lookup
-    global _preset_description_lookup
+    global __preset_lookup
+    global __preset_description_lookup
 
-    full_width = _getTerminalSize()[1]
+    if width is None:
+        width = _getTerminalSize()[1]
 
-    if full_width == 0:
-        full_width = 120
+        if width == 0:
+            width = 120
 
-    name_width = 25 #max(int(full_width / 3), 30)
+    name_width = 25 #max(int(width / 3), 30)
 
-    def printBlock(item_list, prefix="", width = None):
+    def printBlock(print_list, item_list, prefix="", width = None):
+
+        if not item_list:
+            return
 
         if width is None:
             width = min(max(len(n) for n, d in item_list) + 2 + len(prefix), name_width)
         else:
             width += 2
 
-        wrap_width = full_width
+        wrap_width = width
 
         for n, d in item_list:
             d = d.strip()
@@ -709,19 +800,20 @@ def printPresetHelpList(n_list = None):
                 continue
             
             if len(n) > width - len(prefix):
-                print prefix + n
+                print_list.append( prefix + n)
                 initial = " "*(width + 2)
             else:
                 initial = prefix + n + " "*(width - len(n))
 
             if d:
 
-                print '\n'.join(textwrap.wrap(
+                print_list += textwrap.wrap(
                     d, wrap_width,
                     initial_indent = initial,
-                    subsequent_indent = " "*(width)))
+                    subsequent_indent = " "*(width))
+                
             else:
-                print initial
+                print_list.append(initial)
         
     # Once we have everything, run through it all
     class Group:
@@ -737,7 +829,7 @@ def printPresetHelpList(n_list = None):
             
             self.items[name] = description
 
-        def printGroup(self, width):
+        def printGroup(self, print_list, width):
 
             if not self.items:
                 return
@@ -746,9 +838,9 @@ def printPresetHelpList(n_list = None):
 
             if self.name:
                 print self.name + ": " + self.description
-                printBlock(sorted(self.items.iteritems()), "  ", width)
+                printBlock(print_list, sorted(self.items.iteritems()), "  ", width)
             else:
-                printBlock(sorted(self.items.iteritems()), "", width+2)
+                printBlock(print_list, sorted(self.items.iteritems()), "", width+2)
 
     class GroupOrganizer:
 
@@ -768,7 +860,7 @@ def printPresetHelpList(n_list = None):
             if name:
                 self.name_map[name] = description
 
-        def printGroups(self):
+        def printGroups(self, print_list):
 
             if not self.name_map:
                 return
@@ -810,38 +902,43 @@ def printPresetHelpList(n_list = None):
 
             # give them back
             for k, g in sorted(groups.iteritems()):
-                g.printGroup(print_width)
+                g.printGroup(print_list, print_width)
 
 
     ##################################################
     # This is to deal with the special case of presets also being names
     pl_alt = TreeDict()
     pl_alt.update( (__cleanPresetTreeName(k), v)
-                   for k,v in sorted(_preset_lookup.iteritems(), reverse=True) )
+                   for k,v in sorted(__preset_lookup.iteritems(), reverse=True) )
 
-    _preset_description_lookup.attach(recursive = True)
+    __preset_description_lookup.attach(recursive = True)
+
+    print_list = []
 
     org = GroupOrganizer()
 
-    if n_list is None:
+    if preset_list is None:
 
         # Have to sanitize the description tree
         for k in pl_alt.iterkeys(recursive = True, branch_mode = 'only'):
             query_key = k + ".__description__"
-            d = _preset_description_lookup.get(query_key, None)
+            d = __preset_description_lookup.get(query_key, None)
             org.addGroup(k, d if d else "")
 
         for n in sorted(pl_alt.iterkeys(recursive = True, branch_mode = 'all')):
 
             k = __presetTreeName(n)
 
-            if k in _preset_lookup:
-                org.addPreset(n, _preset_lookup[k].description)
+            if k in __preset_lookup:
+                org.addPreset(n, __preset_lookup[k].description)
 
-        org.printGroups()
+        org.printGroups(print_list)
 
     else:
-        printBlock([(n, _preset_lookup[__presetTreeName(n)].description) for n in n_list])
+        printBlock(print_list, [(n, __preset_lookup[__presetTreeName(n)].description) for n in preset_list])
+
+    return print_list
+
 
 def updatePresetCompletionCache(filename):
     """
@@ -855,4 +952,99 @@ def updatePresetCompletionCache(filename):
     f.close()
     
 ################################################################################
-# Now for going through and
+# Now methods for gracefully handling errors
+
+def getPresetCorrectionMessage(preset, n_close = 5, width = 80):
+    global __preset_tree
+
+    if __preset_tree is None:
+        __preset_tree = TreeDict.fromdict(__preset_lookup)
+                                          
+    preset = preset.lower()
+
+    startwith_list = [__cleanPresetTreeName(k)
+                      for k in __preset_tree.iterkeys() if k.startswith(preset)]
+
+    closest = [__cleanPresetTreeName(nc)
+               for nc in __preset_tree.getClosestKey(__presetTreeName(preset), n_close)]
+
+    for k in (set(closest) & set(startwith_list)):
+        closest.pop(closest.index(k))
+
+    return getPresetHelpList(startwith_list + closest, width = 80)
+
+
+def validatePresets(*presets):
+    """
+    Returns list of tuples (bad preset, message if bad).
+    """
+
+    return [(n, getPresetCorrectionMessage(n))
+            for n in presets
+            if __presetTreeName(n) not in __preset_lookup]
+
+def getParameterTree(*presets):
+    """
+    Returns the parameter tree 
+    """
+    
+    tree = getDefaultTree()
+    
+    try:
+        preset_list = [__preset_lookup[__presetTreeName(n)] for n in presets]
+    except KeyError:
+        msgs = validatePresets(*presets)
+        raise BadPreset('\n'.join( (("\n Preset '%s' not found; did you mean:\n " % pname)
+                                    + ('\n'.join(msg)) )
+                        for (pname, msg) in msgs))
+
+    for preset in preset_list:
+        preset(ptree)
+            
+            
+PresetInfo = namedtuple('PresetInfo', 
+                        ['name', 'list_args', 'kw_args', 'need_type_transformation'])
+            
+def parsePresetStrings(ps_list):
+    """
+    Parses parameter tree arguments 
+    """
+    
+    def parsePreset(preset):
+        
+        pi = PresetInfo()
+        
+        if ":" in preset:
+            args = [s.strip() for s in preset.split(":")]
+            
+            pi.name = args[0].lower()
+            pi.list_args = []
+            pi.kw_args = {}
+            pi.need_type_transformation = True
+            
+            def parseArg(s):
+                
+                if "=" in s:
+
+                    index = s.find("=")
+                    name = s[:index]
+                    
+                    # Check the name
+                    name_check = name.replace("_", "")
+                    
+                    if not (name_check[0].isalpha() and name_check.isalnum()):
+                        raise NameError("Argument '%s' not a valid name." % name)
+                    
+                    pi.kw_args[name] = s[index + 1 :]
+                    
+                else:
+
+                    if pi.kw_args:
+                        raise ValueError("Keyword arguments in '%s' must be specified after positional arguments." % pi.name)
+                    
+                    pi.list_args.append(s)
+    
+
+    return [parsePreset(ps) for ps in ps_list]
+
+
