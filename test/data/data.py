@@ -48,7 +48,7 @@ class Data(PModule):
 
         self.log.info("The value of X is %d." % self.p.x)
 
-        return TreeDict(x = self.x)
+        return TreeDict(x = self.p.x)
         
     @classmethod
     def reportResult(cls, parameters, p, r):

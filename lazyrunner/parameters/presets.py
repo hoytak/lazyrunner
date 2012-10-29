@@ -11,20 +11,8 @@ import os, struct
 import inspect
 from os.path import commonprefix
 from common import cleanedPreset, checkNameValidity, combineNames
-from parameters import globalDefaultTree, getDefaultTree
+from parameters import globalDefaultTree, getDefaultTree, modifyPModuleBranchDefault
 from context import getCurrentContext, ensureValidPModuleContext, PresetContext
-
-################################################################################
-# Stuff for keeping track of the parameter tree
-
-def defaults():
-    """
-    The primary way for setting the default parameters in a tree.
-
-    """
-    
-    return TreeDict('Default_Parameter_Tree', __defaultpresettree__ = True)
-
 
 ################################################################################
 # Global variables that hold the lookup tables
@@ -35,11 +23,26 @@ __preset_description_lookup = None
 __preset_tree = None
 
 ################################################################################
+# Stuff for keeping track of the parameter tree
+
+def defaults():
+    """
+    The primary way for setting the default parameters in a tree.
+
+    """
+    global __preset_staging
+    
+    t = TreeDict('Default_Parameter_Tree', __defaultpresettree__ = True)
+    __preset_staging[id(t)] = t
+    return t
+
+################################################################################
 # Functions for pulling out the presets from a PModule
 
 def processPModule(pm):
 
     global __default_tree
+    global __preset_staging
 
     attr_dict = dict(inspect.getmembers(pm))
 
@@ -47,9 +50,10 @@ def processPModule(pm):
         if id(t) in __preset_staging:
                     
             if type(t) is TreeDict and t.get("__defaultpresettree__", False):
-                parameters.modifyDefaultTree(pm.name(), t)
+                modifyPModuleBranchDefault(pm._name, t)
+                del __preset_staging[id(t)]
             else:
-                __preset_staging[id(t)]._prependPModuleContext(pm.name())
+                __preset_staging[id(t)]._prependPModuleContext(pm._name)
 
     
 ############################################################
@@ -106,7 +110,7 @@ class _PresetWrapper:
         else:
             assert type(list_args) is list
         
-            if len(self.arguments) < list_args:
+            if len(self.arguments) < len(list_args):
                 raise TypeError("Preset %s takes fewer arguments than is given." % self.name)
                 
             args = self.arguments[len(list_args):]
@@ -218,12 +222,19 @@ def registerPreset(name, preset, branch = None, description = None,
     description = re.sub(r"\s+", " ", d)
 
     # Checks to make sure it's gonna work later on
-    if type(preset) is not TreeDict: 
+    if type(preset) is not TreeDict and type : 
         
         if not callable(preset):
             raise TypeError("Preset '%s' must be TreeDict or callable with parameter tree." % name)
 
-        args, varargs, keywords, defaults = inspect.getargspec(preset)
+        if inspect.isfunction(preset):
+            args, varargs, keywords, defaults = inspect.getargspec(preset)
+        elif hasattr(preset, "__call__"):
+            args, varargs, keywords, defaults = inspect.getargspec(preset.__call__)
+            assert args[0] == "self"
+            args = args[1:]
+        else:
+            raise TypeError("Preset type not recognized.")
 
         if len(args) == 0:
             raise TypeError("Callable preset '%s' must take parameter tree as argument." % name)
@@ -422,7 +433,7 @@ def allPresets():
     Returns a list of all the currently registered presets.
     """
 
-    return [__cleanPresetTreeName(k) for k in __preset_lookup.keys()]
+    return [__cleanPresetTreeName(k) for k in __preset_lookup.iterkeys()]
 
 ################################################################################
 # Applying the preset
@@ -983,49 +994,26 @@ def validatePresets(*presets):
             for n in presets
             if __presetTreeName(n) not in __preset_lookup]
 
-def getParameterTree(*presets):
-    """
-    Returns the parameter tree 
-    """
-    
-    tree = getDefaultTree()
-    
-    try:
-        preset_list = [__preset_lookup[__presetTreeName(n)] for n in presets]
-    except KeyError:
-        msgs = validatePresets(*presets)
-        raise BadPreset('\n'.join( (("\n Preset '%s' not found; did you mean:\n " % pname)
-                                    + ('\n'.join(msg)) )
-                        for (pname, msg) in msgs))
 
-    for preset in preset_list:
-        preset(ptree)
-            
-            
 PresetInfo = namedtuple('PresetInfo', 
-                        ['name', 'list_args', 'kw_args', 'need_type_transformation'])
-            
-def parsePresetStrings(ps_list):
-    """
-    Parses parameter tree arguments 
-    """
+                        ['name', 'preset', 'list_args', 'kw_args'])
+
+def parsePreset(preset):
     
-    def parsePreset(preset):
-        
-        pi = PresetInfo()
-        
+    if type(preset) is str:
+            
         if ":" in preset:
             args = [s.strip() for s in preset.split(":")]
             
-            pi.name = args[0].lower()
-            pi.list_args = []
-            pi.kw_args = {}
-            pi.need_type_transformation = True
+            name = args[0].lower()
+            preset_wrapper = __preset_lookup[__presetTreeName(name)]
+            list_args = []
+            kw_args = {}
             
             def parseArg(s):
                 
                 if "=" in s:
-
+    
                     index = s.find("=")
                     name = s[:index]
                     
@@ -1038,11 +1026,78 @@ def parsePresetStrings(ps_list):
                     pi.kw_args[name] = s[index + 1 :]
                     
                 else:
-
+    
                     if pi.kw_args:
                         raise ValueError("Keyword arguments in '%s' must be specified after positional arguments." % pi.name)
                     
                     pi.list_args.append(s)
+                    
+            def convertType(s):
+                try:
+                    s = float(s)
+                except ValueError:
+                    return s
+
+                si = int(s)
+                if si == s:
+                    return si
+                else:
+                    return s
+                
+            list_args = [convertType(s) for s in list_args]
+            kw_args = dict( (k, convertType(v)) for k, v in kw_args.iteritems())
+        else:
+            name = preset.lower()
+            preset_wrapper = __preset_lookup[__presetTreeName(name)]
+            list_args = []
+            kw_args = {}
+            
+    elif isinstance(preset, PresetInfo):
+        return preset
+                
+    else:
+        if type(preset) is not tuple or len(preset) != 3:
+            raise TypeError("Preset must be either string or (name, list_args, arg_dict) tuple.")
+        
+        name, list_args, kw_args = preset
+        
+        name = name.lower()
+        preset_wrapper = __preset_lookup[__presetTreeName(name)]
+        
+    return PresetInfo(
+        name = name,
+        preset = preset_wrapper,
+        list_args = list_args,
+        kw_args = kw_args)
+
+def getParameterTree(*presets):
+    """
+    Returns the parameter tree 
+    """
+    
+    try:
+        preset_list = [parsePreset(n) for n in presets]
+    except KeyError:
+        msgs = validatePresets(*presets)
+        raise BadPreset('\n'.join( (("\n Preset '%s' not found; did you mean:\n " % pname)
+                                    + ('\n'.join(msg)) )
+                        for (pname, msg) in msgs))
+
+    tree = getDefaultTree()
+    
+    for pt in preset_list:
+        pt.preset(tree, pt.list_args, pt.kw_args)
+        
+    tree.attach(recursive = True)
+    tree.freeze()
+
+    return tree
+            
+def parsePresetStrings(ps_list):
+    """
+    Parses parameter tree arguments 
+    """
+    
     
 
     return [parsePreset(ps) for ps in ps_list]

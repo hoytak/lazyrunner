@@ -2,9 +2,11 @@ from treedict import TreeDict
 from parameters import applyPreset
 from collections import defaultdict
 from os.path import join
-import hashlib, base64, weakref, sys, gc
+import hashlib, base64, weakref, sys, gc, logging
 from itertools import chain
 from collections import namedtuple
+from pmodule import isPModule, getPModuleClass
+
 
 ################################################################################
 # Stuff to manage the cache
@@ -133,8 +135,6 @@ class _PNodeNonPersistentDeleter(object):
 class PNodeCommon(object):
 
     def __init__(self, opttree):
-        self.opttree = opttree
-        
         self.log = logging.getLogger("RunCTRL")
 
         # This is for node filtering, i.e. eliminating duplicates
@@ -145,6 +145,10 @@ class PNodeCommon(object):
 
         # This is for local cache lootup
         self.cache_lookup = defaultdict(PNodeModuleCache)
+
+        self.disk_read_enabled = opttree.disk_read_enabled
+        self.disk_write_enabled = opttree.disk_write_enabled
+        
 
     def getResults(self, parameters, names):
 
@@ -438,7 +442,8 @@ class PNode(object):
 
             p_class = self.p_class = getPModuleClass(self.name)
             
-            self.parameters[name] = p_class._preprocessParameters(self.parameters)
+            self.parameters[name] = pt = p_class._preprocessParameters(self.parameters)
+            pt.freeze()
             self.parameter_key = self.parameters.hash(name)
 
             h = hashlib.md5()

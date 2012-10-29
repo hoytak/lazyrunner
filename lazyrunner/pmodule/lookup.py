@@ -16,8 +16,9 @@ _pmodule_lookup = None
 def resetAndInitialize():
     global _pmodule_lookup
     global _pmodule_run_queue
+    global _pmodule_run_set
     
-    _module_lookup = {}
+    _pmodule_lookup = {}
     _pmodule_run_queue = []
     _pmodule_run_set = set()
 
@@ -56,9 +57,9 @@ def pmodule(c):
 
     assert type(name) is str
 
-    ret = _pmodule_lookup.setdefault(name, m)
+    ret = _pmodule_lookup.setdefault(name, c)
     
-    if not ret is m:
+    if not ret is c:
         raise NameError("Processing Module '%s' doubly defined (%s, %s)." % (name, inspect.getfile(ret), inspect.getfile(m)))
         
     c.log = logging.getLogger(c._name)

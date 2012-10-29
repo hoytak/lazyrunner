@@ -34,7 +34,7 @@ def resetAndInitGlobalParameterTree():
     __default_tree_finalized = False
 
     
-def modifyInternalDefaultTree(branch, t):
+def modifyPModuleBranchDefault(branch, t):
     global __pmodule_branch_tree
     
     assert __pmodule_branch_tree is not None
