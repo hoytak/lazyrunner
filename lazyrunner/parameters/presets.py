@@ -1070,7 +1070,7 @@ def parsePreset(preset):
         list_args = list_args,
         kw_args = kw_args)
 
-def getParameterTree(*presets):
+def getParameterTree(presets, parameters = None):
     """
     Returns the parameter tree 
     """
@@ -1082,16 +1082,19 @@ def getParameterTree(*presets):
         raise BadPreset('\n'.join( (("\n Preset '%s' not found; did you mean:\n " % pname)
                                     + ('\n'.join(msg)) )
                         for (pname, msg) in msgs))
-
-    tree = getDefaultTree()
+    
+    if parameters is None:
+        parameters = getDefaultTree()
+    else:
+        assert type(parameters) is TreeDict
     
     for pt in preset_list:
-        pt.preset(tree, pt.list_args, pt.kw_args)
+        pt.preset(parameters, pt.list_args, pt.kw_args)
         
-    tree.attach(recursive = True)
-    tree.freeze()
+    parameters.attach(recursive = True)
+    parameters.freeze()
 
-    return tree
+    return parameters
             
 def parsePresetStrings(ps_list):
     """

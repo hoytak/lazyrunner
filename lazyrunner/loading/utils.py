@@ -42,40 +42,4 @@ def loadModule(d, m = None):
         except Exception:
             pass
         
-def checkType(value,required_type, name = None, error_message = None):
 
-    def raiseError():
-        if error_message is None:
-            assert name is not None
-            if type(required_type) in [list, tuple]:
-                err = ("Type of '%s' must be one of %s."
-                      % (name, ','.join(str(t) for t in required_type)))
-            else:
-                err = ("Type of '%s' must be %s."
-                       % (name, str(required_type)))
-        else:
-            err = error_message
-            
-        raise TypeError(err)
-
-    if type(required_type) in [list, tuple]:
-        for t in required_type:
-            if isinstance(value, t):
-                return
-            
-        raiseError()
-    else:
-        if not isinstance(value, required_type):
-            raiseError()
-        
-def checkValue(value,possible_values, name = None, error_message = None):
-
-    if value not in possible_values:
-        if error_message is None:
-            assert name is not None
-            error_message = ("Value of '%s' must be in %s."
-                             % (name, ','.join(sorted(str(v) for v in possible_values))))
-            
-        raise ValueError(error_message)
-    
-    

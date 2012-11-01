@@ -141,13 +141,13 @@ if __name__ == '__main__':
 
     opttree.project_directory = options.directory if options.directory else os.getcwd()
     opttree.debug_mode        = options.debug_mode
-    opttree.verbose_mode      = options.verbose_mode
+    opttree.verbose           = options.verbose_mode
     opttree.no_cache          = options.no_cache
     opttree.force             = options.force
     opttree.cache_read_only   = options.cache_read_only
     opttree.cache_directory   = options.cache_directory
     opttree.no_compile        = options.no_compile
-    opttree.config_module_name = "conf"
+    opttree.config_file       = "conf"
 
     presets                   = args
 

@@ -1,6 +1,6 @@
 
-from treedict import TreeDict
-config = TreeDict("configuration")
+from lazyrunner import configTree
+config = configTree()
 
 ################################################################################
 # Project Source Directories

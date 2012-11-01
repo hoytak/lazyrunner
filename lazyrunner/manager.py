@@ -9,41 +9,19 @@ from os.path import join, expanduser, exists, split, abspath, normpath
 from treedict import TreeDict
 from pnstructures import PNodeCommon, PNode
 
-import parameters
+import parameters as parameter_module
 import pmodule
 import loading
+import configuration
 
-def _setupOptTree(opttree):
-    default_opttree = TreeDict()
-        
-    default_opttree.debug_mode = False
-    default_opttree.project_directory = '.'
-    default_opttree.debug_mode = False
-    default_opttree.verbose = False
-    default_opttree.no_cache = False
-    default_opttree.force = False
-    default_opttree.cache_read_only = False
-    default_opttree.cache_directory = None
-    default_opttree.no_compile = False
-    default_opttree.config_module = 'conf'
-    default_opttree.settings_module = 'settings.defaults'
 
-    if not type(opttree) is TreeDict:
-        raise TypeError("LazyRunner class must be initialized with a TreeDict of options.")
+################################################################################
 
-    opttree = opttree.copy()
-        
-    opttree.update(default_opttree, overwrite_existing = False)
+def clean(custom_opttree):
+    log = logging.getLogger("Configuration")
+    opttree = configuration.setupOptionTree(opttree, log)
 
-    opttree.project_directory = normpath(abspath(expanduser(opttree.project_directory)))
-
-    return opttree
-
-def clean(opttree):
-    opttree = _setupOptTree(opttree)
-    config = loading.loadConfigInformation(opttree)
-
-    loading.cleanAll(opttree, config)
+    loading.cleanAll(opttree)
         
 class RunManager(object):
     """
@@ -64,83 +42,43 @@ class RunManager(object):
         cache_read_only = False, 
         cache_directory = None,
         no_compile = False, 
-        config_module = 'conf',
-        settings_module = 'settings.defaults'
+        config_module = 'conf'
         
         """
-
-            
-        sys.path.append(opttree.project_directory)
-
-        self.opttree = opttree
-        self.config = loading.loadConfigInformation(opttree)
-
-        ################################################################################
-        # Now set up all the logger options
-
         self.log = logging.getLogger("Manager")
-        
-        if  normpath(abspath(expanduser(os.getcwd()))) != opttree.project_directory:
-            self.log.info("Using '%s' as project directory." % opttree.project_directory)
-
-            # Configure the cache directory
-            if opttree.cache_directory is None:
-                cache_directory = config.cache_directory
-                
-            else:
-                cache_directory = opttree.cache_directory
-                
-            cache_read_only = opttree.cache_read_only
-        
-            if opttree.no_cache:
-                cache_directory = None
-    
-            # set up the result cache
-            if cache_directory is not None:
-                
-                self.log.info("Using cache directory '%s'" % cache_directory)
-    
-                self.cache_directory = expanduser(cache_directory)
-                self.disk_read_enabled = True
-                self.disk_write_enabled = not cache_read_only
-            else:
-                self.disk_read_enabled = False
-                self.disk_write_enabled = False
-                self.log.info("Not using disk cache.")
+        self.opttree = opttree = configuration.setupOptionTree(opttree, self.log)
             
         ################################################################################
         # Init all the module lookup stuff
         
         pmodule.resetAndInitialize()
-        parameters.resetAndInitialize()
+        parameter_module.resetAndInitialize()
         
-        loading.resetAndInitModules(self.opttree, self.config)
+        loading.resetAndInitModules(self.opttree)
                 
-        parameters.finalize()
+        parameter_module.finalize()
         pmodule.finalize()
-    
+        
     ########################################################################################
     # General Control Functions
     
-    def run(self, presets):
-        
-        ptree = parameters.getParameterTree(*presets)
-        final_modules = pmodule.getCurrentRunQueue()
-    
-        return self.getResults(ptree, final_modules)
-    
-    def getResults(self, ptree, modules):
+    def getResults(self, modules = None, presets = [], parameters = None):
                 
         common = PNodeCommon(self.opttree)
         
+        ptree = parameter_module.getParameterTree(presets, parameters = parameters)
+        
+        if modules is None:
+            modules = pmodule.getCurrentRunQueue()
+        
         results = common.getResults(ptree, modules)
         
-        return dict(zip(results, modules)) 
+        return dict(zip(modules, results)) 
     
     def getPresetHelp(self, width = None):
-        return '\n'.join(parameters.getPresetHelpList(width = width))
+        return '\n'.join(parameters_module.getPresetHelpList(width = width))
     
     def updatePresetCompletionCache(self, preset_name_cache_file):
-        parameters.presets.updatePresetCompletionCache(preset_name_cache_file)
+        parameter_module.presets.updatePresetCompletionCache(preset_name_cache_file)
             
      

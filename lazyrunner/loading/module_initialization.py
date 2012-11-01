@@ -1,5 +1,4 @@
 from ..exceptions import ConfigError
-from config_processing import loadConfigInformation
 from copy import copy
 from itertools import chain, product
 from os.path import exists, abspath, join, split, relpath
@@ -77,14 +76,14 @@ def check_output(*popenargs, **kwargs):
     return output
 
 
-def readyCMakeProjects(opttree, config):
+def readyCMakeProjects(opttree):
     """
     Compiles CMake Projects. 
     """
 
     # may switch so it runs in a specified build directory.
 
-    if opttree.verbose_mode:
+    if opttree.verbose:
         if opttree.no_compile:
             print "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
             print "Loading cmake project library files.\n"
@@ -92,7 +91,7 @@ def readyCMakeProjects(opttree, config):
             print "\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
             print "Compiling cmake projects.\n"
     
-    for k, b in config.cmake.iteritems(recursive=False, branch_mode = "only"):
+    for k, b in opttree.cmake.iteritems(recursive=False, branch_mode = "only"):
         d = abspath(join(opttree.project_directory, b.directory))
 
         if not exists(d):
@@ -110,7 +109,7 @@ def readyCMakeProjects(opttree, config):
                 raise ConfigError("Error while compiling cmake project '%s' in '%s':\n%s\n%s"
                                   %(k, d, "Error code %d while running '%s':" % (ce.returncode, cmd), ce.output))
 
-        if opttree.verbose_mode:
+        if opttree.verbose:
             print "CMake: '%s' in '%s' " % (k,d)
 
 
@@ -133,7 +132,7 @@ def readyCMakeProjects(opttree, config):
                         if retry_allowed:
                             print ("WARNING: Error while compiling cmake project '%s';"
                                    " removing cache files and retrying.") % k
-                            cleaning.clean_cmake_project(opttree, config, b)
+                            cleaning.clean_cmake_project(opttree, opttree, b)
                             retry_allowed = False
                             continue
 
@@ -160,7 +159,7 @@ def readyCMakeProjects(opttree, config):
                 if load_retry_allowed:
                     print "Error loading library: ", str(ose)
                     print "Cleaning, attempting again."
-                    cleaning.clean_cmake_project(opttree, config, b)
+                    cleaning.clean_cmake_project(opttree, opttree, b)
                     load_retry_allowed = False
                     continue
                 else:
@@ -170,11 +169,11 @@ def readyCMakeProjects(opttree, config):
                         
         loaded_ctype_dlls.append(loaded_ctype_dlls)
 
-    if opttree.verbose_mode:
+    if opttree.verbose:
         print "Done compiling and loading cmake library projects."
         print "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n"
         
-def runBuildExt(opttree, config):
+def runBuildExt(opttree):
     """
     Sets up and runs the python build_ext setup configuration.
     """
@@ -182,7 +181,7 @@ def runBuildExt(opttree, config):
     if opttree.no_compile:
         return
 
-    ct = config.cython
+    ct = opttree.cython
 
     extra_include_dirs = ct.extra_include_dirs
     extra_library_dirs = ct.extra_library_dirs
@@ -192,7 +191,7 @@ def runBuildExt(opttree, config):
     compiler_args      = ct.compiler_args
     link_args          = ct.link_args
 
-    quiet = not opttree.verbose_mode
+    quiet = not opttree.verbose
     
     from distutils.core import setup as dist_setup
     from distutils.extension import Extension
@@ -206,7 +205,7 @@ def runBuildExt(opttree, config):
     # should instead compile the included files
 
     # Get all the cython files in the sub directories and in this directory
-    cython_files = config.cython_files
+    cython_files = opttree.cython_files
 
     # Set the compiler arguments -- Add in the environment path stuff
     ld_library_path = os.getenv("LD_LIBRARY_PATH")
@@ -259,10 +258,10 @@ def runBuildExt(opttree, config):
         return extra_source_map.get(m, [])
 
     def get_extra_compile_args(m):
-        return strip_empty(compiler_args + (['-g'] if config.debug_mode else ["-DNDEBUG"]))
+        return strip_empty(compiler_args + (['-g'] if opttree.debug_mode else ["-DNDEBUG"]))
 
     def get_extra_link_args(m):
-        return strip_empty(link_args + (['-g'] if config.debug_mode else ["-DNDEBUG"]))
+        return strip_empty(link_args + (['-g'] if opttree.debug_mode else ["-DNDEBUG"]))
 
     ############################################################
     # Cython extension lists
@@ -332,14 +331,14 @@ def runBuildExt(opttree, config):
 
     sys.argv = old_argv
 
-def resetAndInitModules(opttree, config):
+def resetAndInitModules(opttree):
     "The main setup function; calls the rest."
-    readyCMakeProjects(opttree, config)
-    runBuildExt(opttree, config)
+    readyCMakeProjects(opttree)
+    runBuildExt(opttree)
 
-    for m in config.modules_to_import:
-	if opttree.verbose_mode:
+    for m in opttree.modules_to_import:
+	if opttree.verbose:
 	    print "Loading module '%s' in directory '%s'" % (m, opttree.project_directory)
 	    
-	loadModule(opttree.project_directory, m)
+	loadModule(m)
 
