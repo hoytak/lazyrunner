@@ -1,3 +1,2 @@
-from module_initialization import resetAndInitModules
+from module_initialization import resetAndInitModules, loadModule, resetAndInitModuleLoading
 from cleaning import cleanAll
-from utils import loadModule

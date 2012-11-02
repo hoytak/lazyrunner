@@ -12,7 +12,6 @@ import inspect
 from os.path import commonprefix
 from common import cleanedPreset, checkNameValidity, combineNames
 from parameters import globalDefaultTree, getDefaultTree, modifyPModuleBranchDefault
-from context import getCurrentContext, ensureValidPModuleContext, PresetContext
 
 ################################################################################
 # Global variables that hold the lookup tables

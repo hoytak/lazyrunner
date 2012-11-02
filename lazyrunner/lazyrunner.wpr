@@ -21,4 +21,4 @@ proj.directory-list = [{'dirloc': loc('parameters'),
                         'watch_for_changes': True}]
 proj.file-list = [loc('parameters/runtime.py')]
 proj.file-type = 'shared'
-proj.main-file = loc('../Z')
+proj.main-file = loc('../test/tests.py')

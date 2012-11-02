@@ -45,12 +45,15 @@ class RunManager(object):
         config_module = 'conf'
         
         """
-        self.log = logging.getLogger("Manager")
-        self.opttree = opttree = configuration.setupOptionTree(opttree, self.log)
             
         ################################################################################
         # Init all the module lookup stuff
         
+        loading.resetAndInitModuleLoading()
+
+        self.log = logging.getLogger("Manager")
+        self.opttree = opttree = configuration.setupOptionTree(opttree, self.log)
+
         pmodule.resetAndInitialize()
         parameter_module.resetAndInitialize()
         
