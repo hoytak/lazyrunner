@@ -22,3 +22,4 @@ proj.directory-list = [{'dirloc': loc('parameters'),
 proj.file-list = [loc('parameters/runtime.py')]
 proj.file-type = 'shared'
 proj.main-file = loc('../test/tests.py')
+testing.test-framework = {loc('../test/tests.py'): ':internal unittest'}

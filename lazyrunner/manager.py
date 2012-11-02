@@ -49,7 +49,7 @@ class RunManager(object):
         ################################################################################
         # Init all the module lookup stuff
         
-        loading.resetAndInitModuleLoading()
+        loading.resetAndInitModuleLoading(opttree)
 
         self.log = logging.getLogger("Manager")
         self.opttree = opttree = configuration.setupOptionTree(opttree, self.log)

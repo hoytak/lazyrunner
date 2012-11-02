@@ -11,8 +11,7 @@ import re
 import ctypes
 import shutil
 import cleaning
-
-from utils import loadModule
+from collections import defaultdict
 
 """
 Specifies the setup stuff 
@@ -26,13 +25,39 @@ from os.path import split, join
 
 __loaded_modules = None
 
-def resetAndInitModuleLoading():
+def resetAndInitModuleLoading(opttree):
     global __loaded_modules
     
+    # Clear out all of the modules in the project directory
+    base_dir = abspath(opttree.project_directory)
+    
+    sub_modules = defaultdict(lambda: [])
+    del_module_keys = []
+    
+    s = sys.modules
+    
+    for k, m in sys.modules.items():
+	if m is None:
+	    kl = k.split('.')
+	
+	    for i in xrange(len(kl)):
+		sub_modules['.'.join(kl[:i])].append(k)
+		
+	else:
+	    if hasattr(m, "__file__") and abspath(m.__file__).startswith(base_dir):
+		del_module_keys.append(k)
+		
+    for k in [k for k in del_module_keys]:
+	del_module_keys += sub_modules[k]
+	
+    for k in del_module_keys:
+	del sys.modules[k]
+	    
     __loaded_modules = {}
     
 def loadModule(d, m = None):
     global __loaded_modules
+    global __pre_loaded_modules
 
     if m is None:
         d, m = split(d.replace(".py", ""))
@@ -53,12 +78,15 @@ def loadModule(d, m = None):
             
         m_data = imp.find_module(m, [d])
 
-        if m_data in __loaded_modules:
-            return __loaded_modules[m_data]
-        
-        module = imp.load_module(m, *m_data)
+	file, path_name, description = m_data
+	key = abspath(path_name)
 
-        __loaded_modules[m_data] = module
+        if key in __loaded_modules:
+            return __loaded_modules[key]
+
+	module = imp.load_module(m, *m_data)
+
+        __loaded_modules[key] = module
         __loaded_modules[(m,d)] = module
 
         return module

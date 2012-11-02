@@ -25,7 +25,7 @@ def configTree():
 
 def finalizeLoadedConfigTree():
     global __custom_config_tree
-    assert __custom_config_tree is not None    
+    assert __custom_config_tree is not None
     t = __custom_config_tree
     __custom_config_tree = None
     
