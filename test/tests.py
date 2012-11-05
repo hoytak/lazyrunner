@@ -22,8 +22,11 @@ def runTest(preset_list, module, test_tree):
         results = runner.getResults(modules = [module], presets = preset_list)
         t = results[module]
         
-        for k, v in test_tree.iteritems():
-            assert t[k] == v, ("%s: t[%s] != %s" % (module, k, repr(v)))
+        if type(test_tree) is TreeDict:
+            for k, v in test_tree.iteritems():
+                assert t[k] == v, ("%s: t[%s] != %s" % (module, k, repr(v)))
+        else:
+            assert test_tree == t
             
     
     opttree = TreeDict()
@@ -94,6 +97,15 @@ class TestBasic(unittest.TestCase):
         test_tree.x = 3
         
         runTest([('data.set_X', [], {'x' : 3})], 'data', test_tree)
+        
+    def test21(self):
+        runTest(['process.addToX'], 'process', 2)
+
+    def test22(self):
+        runTest([('process.addToX', [3])], 'process', 4)
+
+    def test23(self):
+        runTest([('process.returnvalue', ['a'])], 'process', 1)
         
         
 if __name__ == '__main__':

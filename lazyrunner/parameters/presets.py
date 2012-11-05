@@ -146,10 +146,10 @@ class _PresetWrapper:
                     return value
                 try:
                     return int(value)
-                except TypeError:
+                except ValueError:
                     try:
                         return float(value)
-                    except TypeError:
+                    except ValueError:
                         return value
                 
                     
@@ -810,20 +810,21 @@ def getPresetHelpList(preset_list = None, width = None):
 
         if width == 0:
             width = 120
+            
+        if width < 10:
+            width = 10
 
-    name_width = 25 #max(int(width / 3), 30)
+    max_name_width = 25 #max(int(width / 3), 30)
 
-    def printBlock(print_list, item_list, prefix="", width = None):
+    def printBlock(print_list, item_list, prefix="", start_width = None):
 
         if not item_list:
             return
 
-        if width is None:
-            width = min(max(len(n) for n, d in item_list) + 2 + len(prefix), name_width)
+        if start_width is None:
+            start_width = min(max(len(n) for n, d in item_list) + 2 + len(prefix), max_name_width)
         else:
-            width += 2
-
-        wrap_width = width
+            start_width += 2
 
         for n, d in item_list:
             d = d.strip()
@@ -832,18 +833,18 @@ def getPresetHelpList(preset_list = None, width = None):
             if not n and not d:
                 continue
             
-            if len(n) > width - len(prefix):
+            if len(n) > start_width - len(prefix):
                 print_list.append( prefix + n)
-                initial = " "*(width + 2)
+                initial = " "*(start_width + 2)
             else:
-                initial = prefix + n + " "*(width - len(n))
+                initial = prefix + n + " "*(start_width - len(n))
 
             if d:
 
                 print_list += textwrap.wrap(
-                    d, wrap_width,
+                    d, width,
                     initial_indent = initial,
-                    subsequent_indent = " "*(width))
+                    subsequent_indent = " "*(start_width))
                 
             else:
                 print_list.append(initial)
@@ -866,9 +867,7 @@ def getPresetHelpList(preset_list = None, width = None):
 
             if not self.items:
                 return
-
-            print ""
-
+            
             if self.name:
                 print self.name + ": " + self.description
                 printBlock(print_list, sorted(self.items.iteritems()), "  ", width)
@@ -1004,7 +1003,7 @@ def getPresetCorrectionMessage(preset, n_close = 5, width = 80):
     for k in (set(closest) & set(startwith_list)):
         closest.pop(closest.index(k))
 
-    return getPresetHelpList(startwith_list + closest, width = 80)
+    return getPresetHelpList(startwith_list + closest, width = width)
 
 
 def validatePresets(*presets):
