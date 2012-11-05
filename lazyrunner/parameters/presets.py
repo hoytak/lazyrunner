@@ -12,6 +12,7 @@ import inspect
 from os.path import commonprefix
 from common import cleanedPreset, checkNameValidity, combineNames
 from parameters import globalDefaultTree, getDefaultTree, modifyPModuleBranchDefault
+import random
 
 ################################################################################
 # Global variables that hold the lookup tables
@@ -20,6 +21,7 @@ __preset_staging = None
 __preset_lookup = None
 __preset_description_lookup = None
 __preset_tree = None
+__preset_unique_prefix = 'PRESET_' + ('%06x' % random.randrange(256**3)) + "_"
 
 ################################################################################
 # Stuff for keeping track of the parameter tree
@@ -42,18 +44,27 @@ def processPModule(pm):
 
     global __default_tree
     global __preset_staging
+    global __preset_unique_prefix
 
     attr_dict = dict(inspect.getmembers(pm))
 
+    #print "##################################################"
+    #print pm._name
+
     for k, t in attr_dict.iteritems():
-        if id(t) in __preset_staging:
-                    
-            if type(t) is TreeDict and t.get("__defaultpresettree__", False):
+        # print k, t, ": id =", id(t)
+
+        if type(t) is TreeDict and id(t) in __preset_staging:
+            if t.get("__defaultpresettree__", False):
                 modifyPModuleBranchDefault(pm._name, t)
                 del __preset_staging[id(t)]
             else:
                 __preset_staging[id(t)]._prependPModuleContext(pm._name)
-
+                
+        elif hasattr(t, "__name__") and t.__name__.startswith(__preset_unique_prefix):
+            __preset_staging[t.__name__]._prependPModuleContext(pm._name)
+            
+                
     
 ############################################################
 # A container for holding the preset
@@ -74,6 +85,9 @@ class _PresetWrapper:
 
         assert type(list_args) is list
         assert type(argdict) is dict
+
+        list_args = [(arg, True) for arg in list_args]
+        argdict = dict( (k, (arg, True)) for k, arg in argdict.iteritems())
 
         if self.apply:
             for ap in self.apply:
@@ -101,8 +115,8 @@ class _PresetWrapper:
                                 % (self.branch, self.name))
             
         if type(self.action) is TreeDict:
-            if argdict:
-                raise ValueError("Cannot pass keyword arguments to a preset defined as a Tree.")
+            if argdict or list_args:
+                raise ValueError("Cannot pass arguments to a preset defined as a Tree.")
             
             ptree.update(self.action)
             
@@ -117,16 +131,19 @@ class _PresetWrapper:
             leftover_arguments = set(argdict.iterkeys()) - set(a for a, info in args)
             
             if leftover_arguments:
-                raise ValueError("Keyword arguments %s do not match preset arguments %s."
+                raise ValueError("Keyword arguments %s do not match available preset arguments %s."
                                  % ((','.join(sorted(leftover_arguments))), 
                                     (','.join(a for a, info in args))))
             
             call_dict = dict(args) 
+            call_dict.update(dict( zip([k for k, info in self.arguments], list_args)))
             call_dict.update(argdict)
                     
-                    
             def parseArgument(a): 
-                
+                value, convert = a
+
+                if not convert:
+                    return value
                 try:
                     return int(a)
                 except TypeError:
@@ -197,6 +214,9 @@ def registerPreset(name, preset, branch = None, description = None,
     automatically.
     """
 
+    global __preset_staging
+    global __preset_unique_prefix
+
     checkNameValidity(name)
     checkNameValidity(branch)
 
@@ -221,7 +241,7 @@ def registerPreset(name, preset, branch = None, description = None,
     description = re.sub(r"\s+", " ", d)
 
     # Checks to make sure it's gonna work later on
-    if type(preset) is not TreeDict and type : 
+    if type(preset) is not TreeDict:
         
         if not callable(preset):
             raise TypeError("Preset '%s' must be TreeDict or callable with parameter tree." % name)
@@ -252,18 +272,22 @@ def registerPreset(name, preset, branch = None, description = None,
                             % (name, keywords))
         
         if preset_args:
-            arguments = [(arg, (dflt, type(dflt) is str)) 
+            arguments = [(arg, (dflt, False)) 
                               for arg, dflt in zip(preset_args, defaults)]
         else:
             arguments = []
+            
+        preset.__name__ = __preset_unique_prefix + name + str(id(preset))
+        
+        __preset_staging[preset.__name__] = _PresetWrapper(
+            name, branch, preset, description, apply, arguments)
+        
     else:
         arguments = []
-        
-        
-    ########################################
-    # Register it in the staging area
-    __preset_staging[id(preset)] = _PresetWrapper(
-        name, branch, preset, description, apply, arguments)
+
+        __preset_staging[id(preset)] = _PresetWrapper(
+            name, branch, preset, description, apply, arguments)
+
 
 def finalizePresetLookup():
 
@@ -388,10 +412,10 @@ def preset(prefix=None, branch = None, apply = None):
         return PresetContext(prefix, branch, apply = apply)
 
     else:
-        f = prefix
+        f = cleanedPreset(prefix)
         registerPreset(f.__name__, f, ignore_context = False)
 
-        return cleanedPreset(f)
+        return f
 
 def presetTree(name, branch = None, description = None):
     """

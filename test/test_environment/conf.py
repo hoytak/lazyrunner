@@ -1,5 +1,6 @@
 
 from lazyrunner import configTree
+
 config = configTree()
 
 ################################################################################

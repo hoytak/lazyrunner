@@ -52,10 +52,14 @@ def finalizeDefaultTree():
     __default_tree = __default_tree.copy()
     __default_tree.update(__pmodule_branch_tree)
     __default_tree.attach(recursive = True)
+
+    del __default_tree["__defaultpresettree__"]
+    
+    for b in __default_tree.iterbranches():
+        b.pop("__defaultpresettree__", silent = True)
+
     __default_tree.freeze()
     __default_tree_finalized = True
-    
-    __default_tree.freeze()
     
 def globalDefaultTree():
     global __default_tree

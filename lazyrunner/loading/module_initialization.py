@@ -28,7 +28,7 @@ __loaded_modules = None
 def resetAndInitModuleLoading(opttree):
     global __loaded_modules
     
-    # Clear out all of the modules in the project directory
+    # Clear out all of the modules from the project directory
     base_dir = abspath(opttree.project_directory)
     
     sub_modules = defaultdict(lambda: [])

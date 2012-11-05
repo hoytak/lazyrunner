@@ -26,8 +26,8 @@ class Data(PModule):
         p.x = 2
         
     @preset
-    def set_X(p, x_value = 3):
-        p.x = x_value
+    def set_X(p, x = 3):
+        p.x = x
     
 
     # The current version of the pmodule.  The caching facilities
@@ -56,6 +56,8 @@ class Data(PModule):
         # Run the module and return a TreeDict instance holding the
         # results.  Note that this function is not necessarily called
         # if the results can be loaded from cache
+
+        x = self.p.x
 
         self.log.info("The value of X is %d." % self.p.x)
 
