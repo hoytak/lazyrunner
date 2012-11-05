@@ -145,16 +145,15 @@ class _PresetWrapper:
                 if not convert:
                     return value
                 try:
-                    return int(a)
+                    return int(value)
                 except TypeError:
                     try:
-                        return float(a)
+                        return float(value)
                     except TypeError:
-                        return a
+                        return value
                 
                     
-            self.action(ptree, *[parseArgument(a) for a in list_args], 
-                        **dict( (k, parseArgument(a)) for k, a in call_dict.iteritems()))
+            self.action(ptree, **dict( (k, parseArgument(a)) for k, a in call_dict.iteritems()))
 
     def _prependPModuleContext(self, n):
         self.name = combineNames(n, self.name)
@@ -1079,10 +1078,27 @@ def parsePreset(preset):
         return preset
                 
     else:
-        if type(preset) is not tuple or len(preset) != 3:
-            raise TypeError("Preset must be either string or (name, list_args, arg_dict) tuple.")
-        
-        name, list_args, kw_args = preset
+        def raiseException():
+            raise TypeError("Preset must be either string or (name, list_args[, arg_dict]) tuple.")
+
+        if type(preset) is tuple:
+            
+            if len(preset) == 2:
+                name, list_args = preset
+                kw_args = {}
+            elif len(preset) == 3:
+                name, list_args, kw_args = preset
+            else:
+                raiseException()
+            
+            if not (type(list_args) is list and type(kw_args) is dict):
+                raiseException()
+                
+        else:
+            if type(preset) is not str:
+                raiseException()
+            
+            name, list_args, kw_args = preset, [], {}
         
         name = name.lower()
         preset_wrapper = __preset_lookup[__presetTreeName(name)]

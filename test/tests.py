@@ -76,13 +76,25 @@ class TestBasic(unittest.TestCase):
         
         runTest(['data.set_X:3'], 'data', test_tree)
 
-    def test10_paramPassing_1(self):
+    def test10_paramPassing_2(self):
         
         test_tree = TreeDict()
         test_tree.x = 3
         
         runTest(['data.set_X:x=3'], 'data', test_tree)
 
+    def test10_paramPassing_3(self):
+        test_tree = TreeDict()
+        test_tree.x = 3
+        
+        runTest([('data.set_X', [3])], 'data', test_tree)
+
+    def test10_paramPassing_4(self):
+        test_tree = TreeDict()
+        test_tree.x = 3
+        
+        runTest([('data.set_X', [], {'x' : 3})], 'data', test_tree)
+        
         
 if __name__ == '__main__':
     unittest.main()
