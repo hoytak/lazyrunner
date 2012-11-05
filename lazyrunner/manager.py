@@ -23,13 +23,14 @@ def clean(custom_opttree):
 
     loading.cleanAll(opttree)
         
+    
 class RunManager(object):
     """
     A class providing an API for interfacing directly with a
     lazyrunner project.  
     """
 
-    def __init__(self, opttree):
+    def __init__(self, opttree = None):
         """
         Initializes a lazyrunner environment.  The environment options
         are identical to those on the command line.
@@ -45,6 +46,9 @@ class RunManager(object):
         config_module = 'conf'
         
         """
+            
+        if opttree is None:
+            opttree = TreeDict()
             
         ################################################################################
         # Init all the module lookup stuff
@@ -84,4 +88,20 @@ class RunManager(object):
     def updatePresetCompletionCache(self, preset_name_cache_file):
         parameter_module.presets.updatePresetCompletionCache(preset_name_cache_file)
             
+    
+def run(modules, presets = [], project_directory = '.', options = None):
+    """
+    Convenience function for running things directly. `options`, if given,
+    should be a TreeDict of configuration options.
+    """
+    if options is None:
+        options = TreeDict()
+    else:
+        if type(options) is not TreeDict:
+            raise TypeError("options parameter needs to be a TreeDict.")
+        
+    options.project_directory = project_directory
      
+    m = RunManager(options)
+    
+    return m.getResults(modules, presets)
