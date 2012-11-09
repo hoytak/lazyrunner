@@ -26,7 +26,7 @@ class Data(PModule):
         p.x = 2
         
     @preset
-    def set_X(p, x = 3):
+    def set_X(p, x = 2):
         p.x = x
     
 

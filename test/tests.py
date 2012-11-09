@@ -1,4 +1,4 @@
-from lazyrunner import RunManager
+from lazyrunner import RunManager, PCall
 from treedict import TreeDict
 from os.path import exists, join
 import shutil
@@ -72,6 +72,13 @@ class TestBasic(unittest.TestCase):
         
         runTest(['data.set_X_2'], 'data', test_tree)
 
+    def test10_paramPassing_0_defaults(self):
+        
+        test_tree = TreeDict()
+        test_tree.x = 2
+        
+        runTest(['data.set_X'], 'data', test_tree)
+
     def test10_paramPassing_1(self):
         
         test_tree = TreeDict()
@@ -97,6 +104,20 @@ class TestBasic(unittest.TestCase):
         test_tree.x = 3
         
         runTest([('data.set_X', [], {'x' : 3})], 'data', test_tree)
+
+    def test10_paramPassing_5(self):
+        
+        test_tree = TreeDict()
+        test_tree.x = 3
+        
+        runTest([PCall('data.set_X', 3)], 'data', test_tree)
+
+    def test10_paramPassing_6(self):
+        
+        test_tree = TreeDict()
+        test_tree.x = 3
+        
+        runTest([PCall('data.set_X', x=3)], 'data', test_tree)
         
     def test21(self):
         runTest(['process.addToX'], 'process', 2)

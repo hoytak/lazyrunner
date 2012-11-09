@@ -86,9 +86,6 @@ class _PresetWrapper:
         assert type(list_args) is list
         assert type(argdict) is dict
 
-        list_args = [(arg, True) for arg in list_args]
-        argdict = dict( (k, (arg, True)) for k, arg in argdict.iteritems())
-
         if self.apply:
             for ap in self.apply:
                 if type(ap) is dict:
@@ -139,11 +136,8 @@ class _PresetWrapper:
             call_dict.update(dict( zip([k for k, info in self.arguments], list_args)))
             call_dict.update(argdict)
                     
-            def parseArgument(a): 
-                value, convert = a
+            def parseArgument(value): 
 
-                if not convert:
-                    return value
                 try:
                     return int(value)
                 except ValueError:
@@ -271,8 +265,7 @@ def registerPreset(name, preset, branch = None, description = None,
                             % (name, keywords))
         
         if preset_args:
-            arguments = [(arg, (dflt, False)) 
-                              for arg, dflt in zip(preset_args, defaults)]
+            arguments = zip(preset_args, defaults)
         else:
             arguments = []
             
@@ -971,6 +964,18 @@ def getPresetHelpList(preset_list = None, width = None):
 
     return print_list
 
+class PCall(object):
+    
+    def __init__(self, preset_name, *args, **kwargs):
+        
+        if type(preset_name) is not str:
+            raise TypeError("Preset name must be a string.")        
+            
+        self.preset_name = preset_name
+        self.args = list(args)
+        self.kwargs = kwargs
+        
+
 
 def updatePresetCompletionCache(filename):
     """
@@ -1031,12 +1036,11 @@ def parsePreset(preset):
             list_args = []
             kw_args = {}
             
-            def parseArg(s):
-                
+            for s in args[1:]:            
                 if "=" in s:
     
                     index = s.find("=")
-                    name = s[:index]
+                    name = s[:index].strip()
                     
                     # Check the name
                     name_check = name.replace("_", "")
@@ -1044,14 +1048,14 @@ def parsePreset(preset):
                     if not (name_check[0].isalpha() and name_check.isalnum()):
                         raise NameError("Argument '%s' not a valid name." % name)
                     
-                    pi.kw_args[name] = s[index + 1 :]
+                    kw_args[name] = s[index + 1 :].strip()
                     
                 else:
     
-                    if pi.kw_args:
+                    if kw_args:
                         raise ValueError("Keyword arguments in '%s' must be specified after positional arguments." % pi.name)
                     
-                    pi.list_args.append(s)
+                    list_args.append(s)
                     
             def convertType(s):
                 try:
@@ -1067,11 +1071,18 @@ def parsePreset(preset):
                 
             list_args = [convertType(s) for s in list_args]
             kw_args = dict( (k, convertType(v)) for k, v in kw_args.iteritems())
+            
         else:
             name = preset.lower()
             preset_wrapper = __preset_lookup[__presetTreeName(name)]
             list_args = []
             kw_args = {}
+            
+    elif isinstance(preset, PCall):
+        name = preset.preset_name.lower()
+        preset_wrapper = __preset_lookup[__presetTreeName(name)]        
+        list_args = preset.args
+        kw_args = preset.kwargs
             
     elif isinstance(preset, PresetInfo):
         return preset
