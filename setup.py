@@ -3,7 +3,7 @@ from glob import glob
 from os.path import split, join
 from itertools import chain, product
 
-source_directory_list = ['lazyrunner']
+source_directory_list = ['lazyrunner', 'lazyrunner/*']
 version = "0.01v3"
 description="LazyRunner: Module based scientific experiment framework with lazy evaluation."
 author = "Hoyt Koepke"
