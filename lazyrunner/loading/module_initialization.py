@@ -309,9 +309,21 @@ def runBuildExt(opttree):
         return strip_empty(extra_include_dirs)
 
     def get_libnode_library(t):
+	if "library_name" not in t:
+	    raise ValueError("Expected library_name in %s." % t.treeName())
+
+	if type(t.library_name) is not str:
+	    raise ValueError("%s.library_name must be string." % t.treeName())
+	
         return t.library_name
 
     def get_libnode_directory(t):
+	if "directory" not in t:
+	    raise ValueError("Expected directory in %s." % t.treeName())
+
+	if type(t.directory) is not str:
+	    raise ValueError("%s.directory must be a string." % t.treeName())
+
         return t.directory
 
     def get_library_dirs(m):

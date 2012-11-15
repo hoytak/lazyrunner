@@ -11,9 +11,7 @@ __custom_config_tree = None
 def resetAndInitConfig():
 
     global __custom_config_tree
-    
     __custom_config_tree = TreeDict()
-    __custom_config_tree.freeze(values_only = True)
     
 def configTree():
     
@@ -92,7 +90,7 @@ def checkType(value, required_type, name = None, error_message = None):
         if not isinstance(value, required_type):
             raiseError()
         
-def checkValue(value,possible_values, name = None, error_message = None):
+def checkValue(value, possible_values, name = None, error_message = None):
 
     if value not in possible_values:
         if error_message is None:
@@ -102,11 +100,11 @@ def checkValue(value,possible_values, name = None, error_message = None):
             
         raise ValueError(error_message)
     
-def set_and_check_value(cp, n, default_value, possible_values):
+def set_and_check_value(opttree, n, default_value, possible_values):
     opttree.setdefault(n, default_value)
     checkValue(opttree[n], possible_values, n)
     
-def set_and_check_type(cp, n, default_value, required_types):
+def set_and_check_type(opttree, n, default_value, required_types):
     opttree.setdefault(n, default_value)
     checkType(opttree[n], required_types, n)
 
@@ -230,7 +228,7 @@ def _processImportList(opttree, log):
             
             opttree.cython.library_map[k] = v
 
-def setupOptionTree(custom_opttree, log):
+def setupOptionTree(custom_opttree, log, include_config_file):
 
     if not type(custom_opttree) is TreeDict:
         raise TypeError("LazyRunner class must be initialized with a TreeDict of options.")
@@ -253,6 +251,9 @@ def setupOptionTree(custom_opttree, log):
     # Now clean up the remaining issues
     if abspath(normpath(expanduser(os.getcwd()))) != opttree.project_directory:
         log.info("Using '%s' as project directory." % opttree.project_directory)
+
+    if not include_config_file:
+        return opttree
 
     # Load in the config information based on what we have here
     resetAndInitConfig()

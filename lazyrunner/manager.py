@@ -23,14 +23,37 @@ def clean(custom_opttree):
 
     loading.cleanAll(opttree)
         
+
+################################################################################        
+
+__manager = None        
+        
+def initialize(custom_opttree = None):
+    global __manager
+    if __manager is not None:
+        raise RuntimeError("Initialize has already been called!  Call reset first to reinitialize.")
     
-class RunManager(object):
+    __manager = _RunManager(custom_opttree)
+    
+def manager():
+    global __manager
+
+    if __manager is None:
+        raise RuntimeError("Initialize must be called before manager is available.")
+    
+    return __manager
+
+def reset():
+    global __manager
+    __manager = None
+    
+class _RunManager(object):
     """
     A class providing an API for interfacing directly with a
     lazyrunner project.  
     """
 
-    def __init__(self, opttree = None):
+    def __init__(self, custom_opttree = None):
         """
         Initializes a lazyrunner environment.  The environment options
         are identical to those on the command line.
@@ -46,17 +69,20 @@ class RunManager(object):
         config_module = 'conf'
         
         """
+
+        self.log = logging.getLogger("Manager")
             
-        if opttree is None:
-            opttree = TreeDict()
+        if custom_opttree is None:
+            custom_opttree = TreeDict()
             
         ################################################################################
         # Init all the module lookup stuff
+        opttree = configuration.setupOptionTree(custom_opttree, self.log, False)
         
         loading.resetAndInitModuleLoading(opttree)
 
-        self.log = logging.getLogger("Manager")
-        self.opttree = opttree = configuration.setupOptionTree(opttree, self.log)
+        opttree = configuration.setupOptionTree(custom_opttree, self.log, True)
+        self.opttree = opttree
 
         pmodule.resetAndInitialize()
         parameter_module.resetAndInitialize()
