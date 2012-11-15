@@ -37,6 +37,11 @@ is_boolean = set([True, False])
 
 __default_opttree = TreeDict()
     
+__default_opttree.logging.format = (str, '%(asctime)s %(name)-12s %(levelname)-8s %(message)s', 
+                                    'Format string used for the logging.')
+__default_opttree.logging.datefmt = (str, '%H:%M:%S', 
+                                    'Format string used for the date in the logging.')
+    
 __default_opttree.debug_mode = (is_boolean, False, "Enable debug mode in compilation.")
 __default_opttree.project_directory = (str, '.', "The root of the project directory.")
 __default_opttree.verbose = (is_boolean, False, "Print more detailed diagnostic and progress messages.")

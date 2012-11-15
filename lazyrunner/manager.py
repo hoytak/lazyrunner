@@ -2,7 +2,7 @@
 A class that manages a batch of sessions.  
 """
 
-import time, logging, sys
+import time, log_manager, sys
 from diskio import *
 from os import makedirs, remove
 from os.path import join, expanduser, exists, split, abspath, normpath
@@ -17,6 +17,20 @@ import configuration
 
 ################################################################################
 
+def __init_system(custom_opttree):
+    
+    # fill in the custom opt_tree here with default options.
+    if custom_opttree is None:
+        custom_opttree = TreeDict()
+        
+    ################################################################################
+    # get one filled in with the defaults
+    opttree = configuration.setupOptionTree(custom_opttree, None, False)
+
+    
+    
+
+
 def clean(custom_opttree):
     log = logging.getLogger("Configuration")
     opttree = configuration.setupOptionTree(opttree, log)
@@ -30,10 +44,15 @@ __manager = None
         
 def initialize(custom_opttree = None):
     global __manager
+    
     if __manager is not None:
         raise RuntimeError("Initialize has already been called!  Call reset first to reinitialize.")
     
+    __init_system(custom_opttree)
+    
+    # set up the manager    
     __manager = _RunManager(custom_opttree)
+        
     
 def manager():
     global __manager
