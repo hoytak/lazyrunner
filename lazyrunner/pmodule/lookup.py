@@ -60,11 +60,14 @@ def pmodule(c):
     ret = _pmodule_lookup.setdefault(name, c)
     
     if not ret is c:
-        raise NameError("Processing Module '%s' doubly defined (%s, %s)." % (name, inspect.getfile(ret), inspect.getfile(m)))
+        if inspect.getfile(ret) == inspect.getfile(c):
+            return c         
+        
+        raise NameError("Processing Module '%s' doubly defined in files %s and %s." 
+                        % (name, inspect.getfile(ret), inspect.getfile(c)))
+
         
     c.log = logging.getLogger(c._name)
-
-    _pmodule_lookup[name] = c
 
     parameters.processPModule(c)
 

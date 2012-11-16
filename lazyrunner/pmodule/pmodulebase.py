@@ -2,7 +2,7 @@ from copy import deepcopy, copy
 import logging
 from treedict import TreeDict
 import re
-from inspect import getargspec
+from ..robust_inspect import getargspec
 from axisproxy import AxisProxy
     
 class PModule:

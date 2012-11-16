@@ -23,11 +23,19 @@ def configTree():
 
 def finalizeLoadedConfigTree():
     global __custom_config_tree
+    
     assert __custom_config_tree is not None
+    
     t = __custom_config_tree
     __custom_config_tree = None
     
     return t
+
+class DummyLog(object):
+    def info(self, *args, **kwargs): pass
+    def debug(self, *args, **kwargs): pass
+    def error(self, *args, **kwargs): pass
+    def warning(self, *args, **kwargs): pass
 
 
 ################################################################################
@@ -118,7 +126,7 @@ def set_and_check_type(opttree, n, default_value, required_types):
 
 
 def _processCMakeConfig(opttree, log):
-    
+        
     # Now process the cmake directory options
     opttree.makeBranch("cmake")
 
@@ -234,6 +242,9 @@ def _processImportList(opttree, log):
             opttree.cython.library_map[k] = v
 
 def setupOptionTree(custom_opttree, log, include_config_file):
+
+    if log is None:
+        log = DummyLog()
 
     if not type(custom_opttree) is TreeDict:
         raise TypeError("LazyRunner class must be initialized with a TreeDict of options.")

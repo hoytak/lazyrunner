@@ -6,7 +6,6 @@ import sys, textwrap
 import re
 import warnings
 import os, struct
-import inspect
 from os.path import commonprefix
 import common
 

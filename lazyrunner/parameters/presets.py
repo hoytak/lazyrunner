@@ -71,20 +71,17 @@ def processPModule(pm):
 
 class _PresetWrapper:
 
-    def __init__(self, name, branch, action, description, apply, arguments):
+    def __init__(self, name, branch, action, description, apply):
         self.name = name
         self.branch = branch
         self.action = action
         self.description = description
         self.apply = apply
-        self.arguments = arguments
-        
-        assert isinstance(arguments, list)
 
-    def __call__(self, ptree, list_args, argdict):
+    def __call__(self, ptree, list_args, kw_args):
 
         assert type(list_args) is list
-        assert type(argdict) is dict
+        assert type(kw_args) is dict
 
         if self.apply:
             for ap in self.apply:
@@ -96,7 +93,7 @@ class _PresetWrapper:
                     applyPreset(ap, ptree)
                     
                 elif callable(ap):
-                    args, varargs, keywords, defaults = inspect.getargspec(ap)
+                    args, varargs, keywords, defaults = getargspec(ap)
                     
                     if len(args) == 1:
                         ap(ptree)
@@ -118,36 +115,7 @@ class _PresetWrapper:
             ptree.update(self.action)
             
         else:
-            assert type(list_args) is list
-        
-            if len(self.arguments) < len(list_args):
-                raise TypeError("Preset %s takes fewer arguments than is given." % self.name)
-                
-            args = self.arguments[len(list_args):]
-            
-            leftover_arguments = set(argdict.iterkeys()) - set(a for a, info in args)
-            
-            if leftover_arguments:
-                raise ValueError("Keyword arguments %s do not match available preset arguments %s."
-                                 % ((','.join(sorted(leftover_arguments))), 
-                                    (','.join(a for a, info in args))))
-            
-            call_dict = dict(args) 
-            call_dict.update(dict( zip([k for k, info in self.arguments], list_args)))
-            call_dict.update(argdict)
-                    
-            def parseArgument(value): 
-
-                try:
-                    return int(value)
-                except ValueError:
-                    try:
-                        return float(value)
-                    except ValueError:
-                        return value
-                
-                    
-            self.action(ptree, **dict( (k, parseArgument(a)) for k, a in call_dict.iteritems()))
+            self.action(ptree, *list_args, **kw_args)
 
     def _prependPModuleContext(self, n):
         self.name = combineNames(n, self.name)
@@ -238,47 +206,15 @@ def registerPreset(name, preset, branch = None, description = None,
         
         if not callable(preset):
             raise TypeError("Preset '%s' must be TreeDict or callable with parameter tree." % name)
-
-        if inspect.isfunction(preset):
-            args, varargs, keywords, defaults = inspect.getargspec(preset)
-        elif hasattr(preset, "__call__"):
-            args, varargs, keywords, defaults = inspect.getargspec(preset.__call__)
-            assert args[0] == "self"
-            args = args[1:]
-        else:
-            raise TypeError("Preset type not recognized.")
-
-        if len(args) == 0:
-            raise TypeError("Callable preset '%s' must take parameter tree as argument." % name)
-            
-        preset_args = args[1:]
         
-        if len(preset_args) != 0 and (defaults is None or len(defaults) != len(preset_args)):
-            raise TypeError("Additional preset arguments in '%s' must have defaults, with type dictating allowable type for argument." % name)
-
-        if varargs is not None:
-            raise TypeError("Additional preset arguments in '%s' cannot be given by var arg '%s'"
-                            % (name, varargs))
-        
-        if keywords is not None:
-            raise TypeError("Additional preset arguments in '%s' are not currently supported by generic kw args ('%s')."
-                            % (name, keywords))
-        
-        if preset_args:
-            arguments = zip(preset_args, defaults)
-        else:
-            arguments = []
-            
         preset.__name__ = __preset_unique_prefix + name + str(id(preset))
         
         __preset_staging[preset.__name__] = _PresetWrapper(
-            name, branch, preset, description, apply, arguments)
+            name, branch, preset, description, apply)
         
     else:
-        arguments = []
-
         __preset_staging[id(preset)] = _PresetWrapper(
-            name, branch, preset, description, apply, arguments)
+            name, branch, preset, description, apply)
 
 
 def finalizePresetLookup():

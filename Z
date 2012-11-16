@@ -15,7 +15,7 @@ from itertools import izip
 import subprocess, logging
 from treedict import TreeDict
 
-from lazyrunner import RunManager, clean, creation
+from lazyrunner import manager, initialize, clean, creation
 
 # A few global configuration options
 preset_name_cache_file = '.preset_completions'
@@ -173,7 +173,8 @@ if __name__ == '__main__':
 
     elif options.clean:
         clean(opttree)
-        RunManager(opttree).updatePresetCompletionCache(preset_name_cache_file)
+        initialize(opttree)
+        manager().updatePresetCompletionCache(preset_name_cache_file)
 
     else:
         print ""
@@ -181,10 +182,11 @@ if __name__ == '__main__':
         if len(args) == 0:
             print "Warning: Running with no presets specified; use --help to get a list of options.\n"
 
-        m = RunManager(opttree)
-        m.updatePresetCompletionCache(preset_name_cache_file)
+        initialize(opttree)
+
+        manager().updatePresetCompletionCache(preset_name_cache_file)
         
-        m.run(presets)
+        run(None, presets)
 
         print ""
 

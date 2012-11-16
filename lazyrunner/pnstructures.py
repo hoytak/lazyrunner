@@ -977,7 +977,7 @@ class PNode(object):
                                     "and result tree as arguments.") % name)
 
                 # See if it was due to incompatable signature
-                from inspect import getcallargs
+                from robust_inspect import getcallargs
 
                 try:
                     getcallargs(rrf, parameters, p, r)

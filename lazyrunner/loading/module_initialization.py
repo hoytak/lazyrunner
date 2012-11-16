@@ -147,7 +147,10 @@ def check_output(*popenargs, **kwargs):
     """
     if 'stdout' in kwargs:
         raise ValueError('stdout argument not allowed, it will be overridden.')
-    process = Popen(stdout=PIPE, *popenargs, **kwargs)
+    if 'stderr' in kwargs:
+        raise ValueError('stderr argument not allowed, it will be overridden.')
+    
+    process = Popen(stdout=PIPE, stderr=PIPE, *popenargs, **kwargs)
     output, unused_err = process.communicate()
     retcode = process.poll()
     if retcode:
@@ -155,6 +158,7 @@ def check_output(*popenargs, **kwargs):
         if cmd is None:
             cmd = popenargs[0]
         raise CalledProcessError(retcode, cmd, output=output)
+    
     return output
 
 

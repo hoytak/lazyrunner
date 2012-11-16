@@ -1,4 +1,4 @@
-from lazyrunner import RunManager, PCall
+from lazyrunner import manager, initialize, reset, PCall
 from treedict import TreeDict
 from os.path import exists, join
 import shutil
@@ -17,8 +17,11 @@ def runTest(preset_list, module, test_tree):
     # Run several different versions; with and without cache 
 
     def test(opttree):
+        reset()
+        initialize(opttree)
         
-        runner = RunManager(opttree)
+        runner = manager()
+        
         results = runner.getResults(modules = [module], presets = preset_list)
         t = results[module]
         
