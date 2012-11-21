@@ -213,14 +213,19 @@ def _processImportList(opttree, log):
 
     # Recursively go through and add in directories with an __init__.py file
     if opttree.auto_import:
-
+        
+        # Just import the cython files 
+        for dirpath in os.listdir(opttree.project_directory):
+            
+            if not (isdir(dirpath) and exists(join(dirpath, '__init__.py'))):
+                continue
+                        
+            modules_to_import.add(dirpath)
+        
+        # Now, walk the cython modules to get which are going to be imported
         for dirpath, dirnames, filenames in os.walk(opttree.project_directory, topdown=True,followlinks=True):
             new_dirs = [dn for dn in dirnames if exists(join(dirpath, dn, '__init__.py'))]
             dirnames[:] = new_dirs
-
-            new_source_dirs = [abspath(join(dirpath, dn)) for dn in dirnames]
-            
-            modules_to_import.update(new_source_dirs)
 
             # Add in all the cython files present in this directory
             cython_files.update(abspath(join(dirpath, fn)) for fn in filenames

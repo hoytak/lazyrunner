@@ -54,13 +54,15 @@ def pmodule(c):
     global _pmodule_lookup    
     
     name = c._name = c.__name__.lower()
-
+    
     assert type(name) is str
 
     ret = _pmodule_lookup.setdefault(name, c)
     
     if not ret is c:
-        if inspect.getfile(ret) == inspect.getfile(c):
+        if (inspect.getsourcefile(ret) == inspect.getsourcefile(c)
+            or inspect.getfile(ret) == inspect.getfile(c)):
+        
             return c         
         
         raise NameError("Processing Module '%s' doubly defined in files %s and %s." 
@@ -73,7 +75,11 @@ def pmodule(c):
 
     parameters.registerPreset("r." + name, PModulePreset(name),
                               description = "Runs processing module '%s'." % c.__name__)
+    
+    logging.getLogger("Manager").debug("Processing module '%s' registered." % c.__name__)
         
+    c._is_pmodule = True
+    
     return c
 
 def getPModuleClass(name):

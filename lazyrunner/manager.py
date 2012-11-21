@@ -3,7 +3,6 @@ A class that manages a batch of sessions.
 """
 
 import time, logging, sys
-from diskio import *
 from os import makedirs, remove
 from os.path import join, expanduser, exists, split, abspath, normpath
 from treedict import TreeDict
@@ -18,11 +17,7 @@ import configuration
 ################################################################################
 
 def __initLoggingSystem(custom_opttree):
-    
-    # fill in the custom opt_tree here with default options.
-    if custom_opttree is None:
-        custom_opttree = TreeDict()
-        
+            
     # get one filled in with the defaults
     opttree = configuration.setupOptionTree(custom_opttree, None, False)
     
@@ -32,12 +27,20 @@ def __initLoggingSystem(custom_opttree):
         datefmt = opttree.logging.datefmt,
         level = logging.DEBUG if opttree.verbose else logging.INFO
     )
+    
+    logging.captureWarnings(True)
 
-def clean(custom_opttree):
+def clean(custom_opttree = None, **kwargs):
+    
+    if custom_opttree is None:
+        custom_opttree = TreeDict()
+        
+    custom_opttree.update(TreeDict.fromdict(kwargs))
+    
     __initLoggingSystem(custom_opttree)
 
     log = logging.getLogger("Configuration")
-    opttree = configuration.setupOptionTree(opttree, log)
+    opttree = configuration.setupOptionTree(custom_opttree, log, False)
 
     loading.cleanAll(opttree)
         
@@ -46,11 +49,17 @@ def clean(custom_opttree):
 
 __manager = None        
         
-def initialize(custom_opttree = None):
+def initialize(custom_opttree = None, **kwargs):
     global __manager
     
     if __manager is not None:
         raise RuntimeError("Initialize has already been called!  Call reset first to reinitialize.")
+
+    # fill in the custom opt_tree here with default options.
+    if custom_opttree is None:
+        custom_opttree = TreeDict()
+
+    custom_opttree.update(TreeDict.fromdict(kwargs)) 
     
     __initLoggingSystem(custom_opttree)
     
@@ -76,7 +85,7 @@ class _RunManager(object):
     lazyrunner project.  
     """
 
-    def __init__(self, custom_opttree = None):
+    def __init__(self, custom_opttree):
         """
         Initializes a lazyrunner environment.  The environment options
         are identical to those on the command line.
@@ -94,9 +103,6 @@ class _RunManager(object):
         """
 
         self.log = logging.getLogger("Manager")
-            
-        if custom_opttree is None:
-            custom_opttree = TreeDict()
             
         ################################################################################
         # Init all the module lookup stuff

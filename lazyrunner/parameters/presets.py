@@ -228,11 +228,11 @@ def finalizePresetLookup():
         ret = lookup.setdefault(preset_tree_name, pw)
 
         if ret is not pw:
-            if pw2.action is not pw.action:
+            if ret.action is not pw.action:
                 warnings.warn( ("Possible duplicate preset name '%s'; \n "
                                 "  original in module '%s'; ignoring "
                                 "duplicate from module %s.")
-                               % (name, inspect.getmodule(pw2.action), inspect.getmodule(pw.action))
+                               % (pw.name, inspect.getmodule(ret.action), inspect.getmodule(pw.action))
                                )
 
     # Give everything over to the main preset thing

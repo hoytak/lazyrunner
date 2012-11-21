@@ -12,6 +12,7 @@ import ctypes
 import shutil
 import cleaning
 from collections import defaultdict
+from inspect import getsourcefile, getfile
 
 """
 Specifies the setup stuff 
@@ -24,9 +25,11 @@ import imp
 from os.path import split, join
 
 __loaded_modules = None
+__synced_set = None
 
 def resetAndInitModuleLoading(opttree):
     global __loaded_modules
+    global __synced_set
     
     # Clear out all of the modules from the project directory
     base_dir = abspath(opttree.project_directory)
@@ -51,13 +54,17 @@ def resetAndInitModuleLoading(opttree):
 	del_module_keys += sub_modules[k]
 	
     for k in del_module_keys:
-	del sys.modules[k]
+	try:
+	    del sys.modules[k]
+	except KeyError:
+	    pass
 	    
     __loaded_modules = {}
+    __synced_set = set()
     
 def loadModule(d, m = None):
     global __loaded_modules
-    global __pre_loaded_modules
+    global __synced_set
 
     if m is None:
         d, m = split(d.replace(".py", ""))
@@ -73,12 +80,34 @@ def loadModule(d, m = None):
         d, m = join(d, *ml[:-1]), ml[-1]
 
     try:
+	# sync up with the loaded modules
+
         if (m, d) in __loaded_modules:
             return __loaded_modules[(m, d)]
             
+	# Is it in the sys.modules directory?
+	for k, module in sys.modules.iteritems():
+	    if module is None or k in __synced_set:
+		continue 
+	    
+	    __synced_set.add(k)
+
+	    try:
+		path = getfile(module)
+		if path is not None:
+		    __loaded_modules[abspath(path)] = module
+		
+		path = getsourcefile(module)
+		if path is not None:
+		    __loaded_modules[abspath(path)] = module
+
+	    except TypeError: 
+		pass
+	    
         m_data = imp.find_module(m, [d])
 
 	file, path_name, description = m_data
+
 	key = abspath(path_name)
 
         if key in __loaded_modules:

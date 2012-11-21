@@ -2,7 +2,6 @@ from copy import deepcopy, copy
 import logging
 from treedict import TreeDict
 import re
-from ..robust_inspect import getargspec
 from axisproxy import AxisProxy
     
 class PModule:
@@ -34,7 +33,7 @@ class PModule:
 
         pb = parameters[cls._name]
 
-        for t in [[], [pb], [pb,parameters]]:
+        for t in [[], [pb], [pb,parameters.copy(freeze=True)]]:
             try:
                 p = cls.preprocessParameters(*t)
                 break

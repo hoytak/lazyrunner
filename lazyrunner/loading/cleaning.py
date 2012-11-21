@@ -1,5 +1,6 @@
 import os, shutil
 from os.path import exists, join, relpath
+import logging
 
 def silent_remove(opttree, f, is_dir = False):
 
@@ -32,12 +33,8 @@ def clean_cmake_project(opttree, cmake_project_branch):
 def clean_cython_file(opttree, f):
     assert f.endswith(".pyx")
 
-    if opttree.cython.use_cpp:
-        cf = f[:-4] + ".cpp"
-    else:
-        cf = f[:-4] + ".c"
-
-    silent_remove(opttree, cf)
+    silent_remove(opttree, f[:-4] + ".cpp")
+    silent_remove(opttree, f[:-4] + ".c")
     silent_remove(opttree, f[:-4] + ".so")
 
 def clean_pyc_files(opttree):
@@ -45,7 +42,14 @@ def clean_pyc_files(opttree):
         for fn in filenames:
             if fn.endswith(".pyc"):
                 silent_remove(opttree, join(opttree.project_directory, dirpath, fn))
+
+def clean_so_files(opttree):
+    for dirpath, dirnames, filenames in os.walk(opttree.project_directory):
+        for fn in filenames:
+            if fn.endswith(".so"):
+                silent_remove(opttree, join(opttree.project_directory, dirpath, fn))
                 
+                    
     
 def cleanAll(opttree):
 
@@ -65,3 +69,6 @@ def cleanAll(opttree):
         
     log.info("Cleaning old python .pyc files.")
     clean_pyc_files(opttree)
+
+    log.info("Cleaning old so files.")
+    clean_so_files(opttree)

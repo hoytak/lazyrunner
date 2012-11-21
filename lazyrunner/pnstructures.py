@@ -1,11 +1,13 @@
 from treedict import TreeDict
 from parameters import applyPreset
 from collections import defaultdict
-from os.path import join
+from os.path import join, abspath, exists, split
+from os import makedirs
 import hashlib, base64, weakref, sys, gc, logging
 from itertools import chain
 from collections import namedtuple
 from pmodule import isPModule, getPModuleClass
+from diskio import saveResults, loadResults
 
 
 ################################################################################
@@ -146,6 +148,7 @@ class PNodeCommon(object):
         # This is for local cache lootup
         self.cache_lookup = defaultdict(PNodeModuleCache)
 
+        self.cache_directory = opttree.cache_directory
         self.disk_read_enabled = opttree.disk_read_enabled
         self.disk_write_enabled = opttree.disk_write_enabled
         
