@@ -19,7 +19,6 @@ def runTest(preset_list, module, test_tree):
     def test(opttree):
         reset()
         initialize(opttree)
-        
         runner = manager()
         
         results = runner.getResults(modules = [module], presets = preset_list)
@@ -34,6 +33,8 @@ def runTest(preset_list, module, test_tree):
     
     opttree = TreeDict()
     opttree.project_directory = project_directory
+    opttree.debug_mode = True
+    opttree.verbose_mode = True
     
     test(opttree)
     

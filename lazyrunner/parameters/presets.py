@@ -46,13 +46,11 @@ def processPModule(pm):
     global __preset_staging
     global __preset_unique_prefix
 
-    def runPModule(pm, name):
-        if pm is object:
-            return
+    def _process_pmodule(pm, name):
 
         # Do it first so that higher level things are overridden by upper level ones
         for base in pm.__bases__:
-            runPModule(base, name)
+            _process_pmodule(base, name)
         
         attr_dict = dict(inspect.getmembers(pm))
     
@@ -67,8 +65,8 @@ def processPModule(pm):
             elif hasattr(t, "__name__") and t.__name__.startswith(__preset_unique_prefix):
                 __preset_staging[t.__name__]._prependPModuleContext(name)
                 
-    runPModule(pm, pm._name)
-            
+    _process_pmodule(pm, pm._name)
+    
                 
     
 ############################################################
@@ -974,6 +972,8 @@ def validatePresets(*presets):
     """
     Returns list of tuples (bad preset, message if bad).
     """
+
+    assert all(type(n) is str for n in presets)
 
     return [(n, getPresetCorrectionMessage(n))
             for n in presets
