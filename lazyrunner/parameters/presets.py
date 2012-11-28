@@ -46,23 +46,28 @@ def processPModule(pm):
     global __preset_staging
     global __preset_unique_prefix
 
-    attr_dict = dict(inspect.getmembers(pm))
+    def runPModule(pm, name):
+        if pm is object:
+            return
 
-    #print "##################################################"
-    #print pm._name
-
-    for k, t in attr_dict.iteritems():
-        # print k, t, ": id =", id(t)
-
-        if type(t) is TreeDict and id(t) in __preset_staging:
-            if t.get("__defaultpresettree__", False):
-                modifyPModuleBranchDefault(pm._name, t)
-                del __preset_staging[id(t)]
-            else:
-                __preset_staging[id(t)]._prependPModuleContext(pm._name)
+        # Do it first so that higher level things are overridden by upper level ones
+        for base in pm.__bases__:
+            runPModule(base, name)
+        
+        attr_dict = dict(inspect.getmembers(pm))
+    
+        for k, t in attr_dict.iteritems():
+            if type(t) is TreeDict and id(t) in __preset_staging:
+                if t.get("__defaultpresettree__", False):
+                    modifyPModuleBranchDefault(name, t)
+                    del __preset_staging[id(t)]
+                else:
+                    __preset_staging[id(t)]._prependPModuleContext(name)
+                    
+            elif hasattr(t, "__name__") and t.__name__.startswith(__preset_unique_prefix):
+                __preset_staging[t.__name__]._prependPModuleContext(name)
                 
-        elif hasattr(t, "__name__") and t.__name__.startswith(__preset_unique_prefix):
-            __preset_staging[t.__name__]._prependPModuleContext(pm._name)
+    runPModule(pm, pm._name)
             
                 
     
@@ -900,16 +905,34 @@ def getPresetHelpList(preset_list = None, width = None):
 
     return print_list
 
+
 class PCall(object):
     
     def __init__(self, preset_name, *args, **kwargs):
         
-        if type(preset_name) is not str:
+        if type(preset_name) is not str and preset_name is not None:
             raise TypeError("Preset name must be a string.")        
             
         self.preset_name = preset_name
         self.args = list(args)
         self.kwargs = kwargs
+        
+    def __call__(self, *args, **kwargs):
+        self.args = list(args)
+        self.kwargs = kwargs
+        
+    def __getattr__(self, attr):
+        return PCall(combineNames(self.preset_name, attr))
+        
+        
+class PDeltaTree(object):
+    
+    def __init__(self, tree):
+        self.tree = tree.copy()
+        self.tree.attach(recursive = True)
+
+    def __call__(self, p_tree):
+        p_tree.update(self.tree)
         
 
 
@@ -1019,6 +1042,12 @@ def parsePreset(preset):
         preset_wrapper = __preset_lookup[__presetTreeName(name)]        
         list_args = preset.args
         kw_args = preset.kwargs
+    
+    elif type(preset) is TreeDict:
+        name = None
+        preset_wrapper = PDeltaTree(preset)
+        list_args = []
+        kw_args = {}
             
     elif isinstance(preset, PresetInfo):
         return preset
@@ -1085,8 +1114,6 @@ def parsePresetStrings(ps_list):
     """
     Parses parameter tree arguments 
     """
-    
-    
 
     return [parsePreset(ps) for ps in ps_list]
 
