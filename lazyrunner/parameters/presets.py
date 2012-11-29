@@ -55,13 +55,14 @@ def processPModule(pm):
         attr_dict = dict(inspect.getmembers(pm))
     
         for k, t in attr_dict.iteritems():
-            if type(t) is TreeDict and id(t) in __preset_staging:
-                if t.get("__defaultpresettree__", False):
-                    modifyPModuleBranchDefault(name, t)
-                    del __preset_staging[id(t)]
-                else:
-                    __preset_staging[id(t)]._prependPModuleContext(name)
-                    
+            if type(t) is TreeDict:
+                if id(t) in __preset_staging:
+                    if t.get("__defaultpresettree__", False):
+                        modifyPModuleBranchDefault(name, t)
+                        del __preset_staging[id(t)]
+                    else:
+                        __preset_staging[id(t)]._prependPModuleContext(name)
+
             elif hasattr(t, "__name__") and t.__name__.startswith(__preset_unique_prefix):
                 __preset_staging[t.__name__]._prependPModuleContext(name)
                 
@@ -81,7 +82,7 @@ class _PresetWrapper:
         self.description = description
         self.apply = apply
 
-    def __call__(self, ptree, list_args, kw_args):
+    def __call__(self, ptree, list_args = [], kw_args = {}):
 
         assert type(list_args) is list
         assert type(kw_args) is dict
@@ -112,7 +113,7 @@ class _PresetWrapper:
                                 % (self.branch, self.name))
             
         if type(self.action) is TreeDict:
-            if argdict or list_args:
+            if kw_args or list_args:
                 raise ValueError("Cannot pass arguments to a preset defined as a Tree.")
             
             ptree.update(self.action)
@@ -911,16 +912,17 @@ class PCall(object):
         if type(preset_name) is not str and preset_name is not None:
             raise TypeError("Preset name must be a string.")        
             
-        self.preset_name = preset_name
-        self.args = list(args)
-        self.kwargs = kwargs
+        self._preset_name_ = preset_name
+        self._preset_args_ = list(args)
+        self._preset_kwargs_ = kwargs
         
     def __call__(self, *args, **kwargs):
-        self.args = list(args)
-        self.kwargs = kwargs
+        self._preset_args_ = list(args)
+        self._preset_kwargs_ = kwargs
+        return self
         
     def __getattr__(self, attr):
-        return PCall(combineNames(self.preset_name, attr))
+        return PCall(combineNames(self._preset_name_, attr))
         
         
 class PDeltaTree(object):
@@ -973,7 +975,23 @@ def validatePresets(*presets):
     Returns list of tuples (bad preset, message if bad).
     """
 
-    assert all(type(n) is str for n in presets)
+    def translate(n):
+        if type(n) is str:
+            pass
+        elif type(n) is tuple:
+            n = n[0]
+        elif isinstance(n, PCall):
+            n = n._preset_name_
+        else:
+            raise TypeError("Preset type not recognized for '%s'." % n)
+        
+        if type(n) is not str:
+            raise TypeError("Preset type not recognized for '%s'." % n)
+        
+        return n
+        
+    
+    presets = [translate(n) for n in presets]
 
     return [(n, getPresetCorrectionMessage(n))
             for n in presets
@@ -1038,10 +1056,10 @@ def parsePreset(preset):
             kw_args = {}
             
     elif isinstance(preset, PCall):
-        name = preset.preset_name.lower()
+        name = preset._preset_name_.lower()
         preset_wrapper = __preset_lookup[__presetTreeName(name)]        
-        list_args = preset.args
-        kw_args = preset.kwargs
+        list_args = preset._preset_args_
+        kw_args = preset._preset_kwargs_
     
     elif type(preset) is TreeDict:
         name = None

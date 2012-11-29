@@ -65,7 +65,7 @@ def initialize(custom_opttree = None, **kwargs):
     
     # set up the manager    
     __manager = _RunManager(custom_opttree)
-        
+
     
 def manager():
     global __manager

@@ -11,6 +11,7 @@ import re
 import ctypes
 import shutil
 import cleaning
+import logging
 from collections import defaultdict
 from inspect import getsourcefile, getfile
 
@@ -108,12 +109,16 @@ def loadModule(d, m = None):
 
 	file, path_name, description = m_data
 
+	log = logging.getLogger("Loading")
+
 	key = abspath(path_name)
 
         if key in __loaded_modules:
+	    log.debug("Module '%s' already loaded." % key)
             return __loaded_modules[key]
 
 	module = imp.load_module(m, *m_data)
+	log.debug("Module '%s' loaded." % key)
 
         __loaded_modules[key] = module
         __loaded_modules[(m,d)] = module

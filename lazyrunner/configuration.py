@@ -216,14 +216,15 @@ def _processImportList(opttree, log):
         
         # Just import the cython files 
         for dirpath in os.listdir(opttree.project_directory):
+            dirpath = join(opttree.project_directory, dirpath)
             
-            if not (isdir(dirpath) and exists(join(dirpath, '__init__.py'))):
-                continue
-                        
-            modules_to_import.add(dirpath)
+            if isdir(dirpath) and exists(join(dirpath, '__init__.py')):
+                modules_to_import.add(dirpath)
         
         # Now, walk the cython modules to get which are going to be imported
         for dirpath, dirnames, filenames in os.walk(opttree.project_directory, topdown=True,followlinks=True):
+            dirpath = join(opttree.project_directory, dirpath)
+
             new_dirs = [dn for dn in dirnames if exists(join(dirpath, dn, '__init__.py'))]
             dirnames[:] = new_dirs
 
@@ -270,11 +271,11 @@ def setupOptionTree(custom_opttree, log, include_config_file):
     opttree.project_directory = abspath(normpath(expanduser(opttree.project_directory)))
 
     # Now clean up the remaining issues
-    if abspath(normpath(expanduser(os.getcwd()))) != opttree.project_directory:
-        log.info("Using '%s' as project directory." % opttree.project_directory)
-
     if not include_config_file:
         return opttree
+
+    if abspath(normpath(expanduser(os.getcwd()))) != opttree.project_directory:
+        log.info("Using '%s' as project directory." % opttree.project_directory)
 
     # Load in the config information based on what we have here
     resetAndInitConfig()

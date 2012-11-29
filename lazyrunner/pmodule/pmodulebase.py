@@ -105,7 +105,7 @@ class PModule:
                 if deps is null_:
                     raise TypeError(("%s() for %s must be a string, list, tuple, set or "
                                      "take either no parameters, the local parameter "
-                                     "tree, ro the local and global parameter trees.")
+                                     "tree, or the local and global parameter trees.")
                                     % (dep_attr, cls._name))
 
                 

@@ -6,10 +6,6 @@ p = globalDefaultTree()
 p.data_defaults.a = 1
 p.data_defaults.b = 2
 
-
-print "DATA MODULE IMPORTED"
-
-
 @preset
 def change_default_a(p):
     p.data_defaults.a = 10
