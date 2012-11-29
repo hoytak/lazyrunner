@@ -498,7 +498,7 @@ class PNode(object):
                     for se in s:
                         add(se, parameters, first_order, name_override)
 
-                elif getattr(s, "__parameter_containe__", False):
+                elif getattr(s, "__parameter_container__", False):
                     add(s.name, s._getParameters(parameters), False, s._getLoadName())
                 else:
                     raise TypeError("Dependency type not recognized.")
