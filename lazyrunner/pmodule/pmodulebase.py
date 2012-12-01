@@ -73,7 +73,7 @@ class PModule:
                 elif dl is None:
                     s = []
                 else:
-                    wrong_type(s)
+                    wrong_type(dl)
                     
                 s = [clean(se) for se in s]
 

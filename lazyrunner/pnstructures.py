@@ -446,6 +446,7 @@ class PNode(object):
             p_class = self.p_class = getPModuleClass(self.name)
             
             self.parameters[name] = pt = p_class._preprocessParameters(self.parameters)
+            pt.attach(recursive = True)
             pt.freeze()
             self.parameter_key = self.parameters.hash(name)
 
