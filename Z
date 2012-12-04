@@ -184,9 +184,9 @@ if __name__ == '__main__':
 
         initialize(opttree)
 
-        manager().updatePresetCompletionCache(preset_name_cache_file)
-        
-        run(None, presets)
+        m = manager()
+        m.updatePresetCompletionCache(preset_name_cache_file)
+        m.getResults(None, presets)
 
         print ""
 

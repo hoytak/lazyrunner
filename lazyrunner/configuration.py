@@ -2,6 +2,7 @@ from treedict import TreeDict
 from os.path import exists, join, split, abspath, isdir, normpath, relpath, expanduser
 import os
 import loading
+import sys
 
 ################################################################################
 # Options for handling the config tree
@@ -327,5 +328,8 @@ def setupOptionTree(custom_opttree, log, include_config_file):
 
     opttree.attach(recursive = True)
     opttree.freeze()
+        
+    # Add up 
+    sys.path.insert(0, opttree.project_directory)
         
     return opttree

@@ -41,6 +41,8 @@ def modifyPModuleBranchDefault(branch, t):
     t = t.copy()
     t.attach(recursive = True)
     
+    del t["__defaultpresettree__"]
+    
     __pmodule_branch_tree.makeBranch(branch).update(t)
         
 
