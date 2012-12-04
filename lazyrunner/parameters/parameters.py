@@ -62,12 +62,11 @@ def finalizeDefaultTree():
     __default_tree.freeze()
     __default_tree_finalized = True
     
-def globalDefaultTree():
+def modifyGlobalDefaultTree(tree):
     global __default_tree
     
-    assert __default_tree is not None
-    		
-    return __default_tree
+    __default_tree.update(tree)
+    
 
 def getDefaultTree():
     

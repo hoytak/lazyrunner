@@ -1,5 +1,5 @@
 from parameters import applyPreset, preset, presetTree, group, \
-     registerPreset, allPresets, BadPreset, defaults, globalDefaultTree, PCall, pcall
+     registerPreset, allPresets, BadPreset, defaults, PCall, pcall
 
 from parameters.runtime import Delta, Direct
 

@@ -11,7 +11,7 @@ import os, struct
 import inspect
 from os.path import commonprefix
 from common import cleanedPreset, checkNameValidity, combineNames
-from parameters import globalDefaultTree, getDefaultTree, modifyPModuleBranchDefault
+from parameters import getDefaultTree, modifyPModuleBranchDefault, modifyGlobalDefaultTree
 import random
 
 ################################################################################
@@ -46,6 +46,8 @@ def processPModule(pm):
     global __preset_staging
     global __preset_unique_prefix
 
+    already_processed = set()
+
     def _process_pmodule(pm, name):
 
         # Do it first so that higher level things are overridden by upper level ones
@@ -55,16 +57,25 @@ def processPModule(pm):
         attr_dict = dict(inspect.getmembers(pm))
     
         for k, t in attr_dict.iteritems():
+            
             if type(t) is TreeDict:
-                if id(t) in __preset_staging:
+                if id(t) in __preset_staging and not id(t) in already_processed:
                     if t.get("__defaultpresettree__", False):
                         modifyPModuleBranchDefault(name, t)
                         del __preset_staging[id(t)]
                     else:
                         __preset_staging[id(t)]._prependPModuleContext(name)
+                    
+                    already_processed.add(id(t))
 
-            elif hasattr(t, "__name__") and t.__name__.startswith(__preset_unique_prefix):
+            elif (hasattr(t, "__name__") 
+                  and t.__name__.startswith(__preset_unique_prefix)
+                  and not t.__name__ in already_processed):
+                                            
+                p = __preset_staging[t.__name__]
                 __preset_staging[t.__name__]._prependPModuleContext(name)
+                
+                already_processed.add(t.__name__)
                 
     _process_pmodule(pm, pm._name)
     
@@ -226,6 +237,11 @@ def finalizePresetLookup():
     lookup = {}
 
     for pw in __preset_staging.itervalues():
+
+        if type(pw) is TreeDict:
+            del pw["__defaultpresettree__"]
+            modifyGlobalDefaultTree(pw)
+            continue
 
         preset_tree_name = __presetTreeName(pw.name)
 
