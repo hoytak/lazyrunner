@@ -156,7 +156,10 @@ class PNodeCommon(object):
     def getResults(self, parameters, names):
 
         if type(names) is str:
+            single = True
             names = [names]
+        else:
+            single = False
 
         def getPN(n):
             if type(n) is not str:
@@ -175,7 +178,13 @@ class PNodeCommon(object):
         
         assert len(set(id(pn) for pn in pn_list)) == len(set(names))
 
-        return [pn.pullUpToResults().result for pn in pn_list]
+        ret_list = [pn.pullUpToResults().result for pn in pn_list]
+        
+        if single:
+            assert len(ret_list) == 1
+            return ret_list[0]
+        else:
+            return ret_list
     
         
     def registerPNode(self, pn):
@@ -187,14 +196,14 @@ class PNodeCommon(object):
             pnf = self.pnode_lookup[key]
             if not pn.is_only_parameter_dependency:
                 pnf.is_only_parameter_dependency = False
-            pn = pnf
+            pn_ret = pnf
             
         else:
-            self.pnode_lookup[key] = pn
+            self.pnode_lookup[key] = pn_ret = pn
 
-        pn.buildReferences()
+        pn_ret.buildReferences()
             
-        return pn
+        return pn_ret
 
     def deregisterPNode(self, pn):
         key = (pn.name, pn.key)
@@ -764,7 +773,7 @@ class PNode(object):
         if self.parameter_reference_count == 0 and (
             self.is_only_parameter_dependency or self.module_access_reference_count == 0):
 
-            # Clean out the heavy parts in light of everythin
+            # Clean out the heavy parts in light of everything
             if not self.is_only_parameter_dependency:
                 self.common.deregisterPNode(self)
                 
@@ -772,13 +781,13 @@ class PNode(object):
                 self.result_dependencies.clear()
                 self.parameter_dependencies.clear()
 
-            self.parameters = None
-
     def increaseParameterReference(self):
         if not self.is_only_parameter_dependency:
             assert self.module_reference_count <= self.parameter_reference_count
             assert self.result_reference_count <= self.parameter_reference_count
             
+        assert type(self.parameters) is TreeDict
+        
         self.parameter_reference_count += 1
 
     def decreaseParameterReference(self):
@@ -842,6 +851,8 @@ class PNode(object):
         return self.parameters[self.name]
             
     def pullParameters(self):
+        assert self.parameter_reference_count >= 1
+        
         p = self.parameters[self.name]
 
         self.decreaseParameterReference()

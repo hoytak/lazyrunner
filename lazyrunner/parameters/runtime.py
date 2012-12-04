@@ -1,3 +1,5 @@
+from presets import getParameterTree
+
 ################################################################################
 
 class Direct(object):
@@ -53,7 +55,17 @@ class Delta(object):
         self.name = p_name.lower().strip()
         self.local_delta = local_delta
         self.delta = delta
-        self.apply_preset = apply_preset
+        
+        if apply_preset is None:
+            self.apply_preset = None
+        elif type(apply_preset) is str:
+            self.apply_preset = [apply_preset]
+        elif type(apply_preset) is list or type(apply_preset) is tuple:
+            self.apply_preset = list(apply_preset)
+        else:
+            raise TypeError("apply_preset must be either string, list, or tuple (not %s)"
+                            % str(type(apply_preset)))
+        
         self.load_name = name
 
     def _getParameters(self, raw_parameters):
@@ -69,14 +81,7 @@ class Delta(object):
             pt[self.name].update(self.local_delta, protect_structure=False)
 
         if self.apply_preset is not None:
-            if type(self.apply_preset) is str:
-                applyPreset(pt, self.apply_preset)
-            elif type(self.apply_preset) is list or type(self.apply_preset) is tuple:
-                applyPreset(pt, *self.apply_preset)
-            else:
-                raise TypeError("apply_preset must be either string, list, or tuple (not %s)"
-                                % str(type(self.apply_preset)))
-        pt.run_queue = []
+            pt = getParameterTree(self.apply_preset, pt)
 
         return pt
 

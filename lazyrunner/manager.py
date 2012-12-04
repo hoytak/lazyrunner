@@ -133,6 +133,9 @@ class _RunManager(object):
         if modules is None:
             modules = pmodule.getCurrentRunQueue()
         
+        if type(modules) is str:        
+            modules = [modules]
+        
         results = common.getResults(ptree, modules)
         
         return dict(zip(modules, results)) 

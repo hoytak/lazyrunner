@@ -39,7 +39,7 @@ def addToRunQueue(module_name):
 def getCurrentRunQueue():
     global _pmodule_run_queue
     
-    return [s for s in _pmodule_lookup]
+    return [s for s in _pmodule_run_queue]
 
 class PModulePreset(object):
     
