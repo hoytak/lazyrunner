@@ -1,7 +1,7 @@
-from lazyrunner import pmodule, PModule, preset, presetTree, defaults, globalDefaultTree
+from lazyrunner import pmodule, PModule, preset, presetTree, defaults
 from treedict import TreeDict
 
-p = globalDefaultTree()
+p = defaults()
 
 p.data_defaults.a = 1
 p.data_defaults.b = 2

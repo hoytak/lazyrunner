@@ -13,11 +13,13 @@ from os.path import commonprefix
 from common import cleanedPreset, checkNameValidity, combineNames
 from parameters import getDefaultTree, modifyPModuleBranchDefault, modifyGlobalDefaultTree
 import random
+from copy import copy
 
 ################################################################################
 # Global variables that hold the lookup tables
 
 __preset_staging = None
+__preset_staging_visited = None
 __preset_lookup = None
 __preset_description_lookup = None
 __preset_tree = None
@@ -44,6 +46,7 @@ def processPModule(pm):
 
     global __default_tree
     global __preset_staging
+    global __preset_staging_visited
     global __preset_unique_prefix
 
     already_processed = set()
@@ -62,9 +65,12 @@ def processPModule(pm):
                 if id(t) in __preset_staging and not id(t) in already_processed:
                     if t.get("__defaultpresettree__", False):
                         modifyPModuleBranchDefault(name, t)
-                        del __preset_staging[id(t)]
+                        __preset_staging_visited.add(id(t))
                     else:
-                        __preset_staging[id(t)]._prependPModuleContext(name)
+                        pw = copy(__preset_staging[id(t)])
+                        pw._prependPModuleContext(name)
+                        __preset_staging[id(pw)] = pw
+                        __preset_staging_visited.add(id(t))
                     
                     already_processed.add(id(t))
 
@@ -72,8 +78,10 @@ def processPModule(pm):
                   and t.__name__.startswith(__preset_unique_prefix)
                   and not t.__name__ in already_processed):
                                             
-                p = __preset_staging[t.__name__]
-                __preset_staging[t.__name__]._prependPModuleContext(name)
+                p = copy(__preset_staging[t.__name__])
+                p._prependPModuleContext(name)
+                __preset_staging[id(p)] = p
+                __preset_staging_visited.add(t.__name__)
                 
                 already_processed.add(t.__name__)
                 
@@ -154,11 +162,13 @@ def __cleanPresetTreeName(n):
 
 def resetAndInitPresets():
     global __preset_staging
+    global __preset_staging_visited
     global __preset_lookup
     global __preset_description_lookup
     global __preset_tree
 
     __preset_staging = {}
+    __preset_staging_visited = set()
     __preset_lookup = {}
     __preset_description_lookup = TreeDict('preset_descriptions')
     __preset_tree = None
@@ -235,6 +245,9 @@ def registerPreset(name, preset, branch = None, description = None,
 def finalizePresetLookup():
 
     lookup = {}
+    
+    for k in __preset_staging_visited:
+        del __preset_staging[k]
 
     for pw in __preset_staging.itervalues():
 
