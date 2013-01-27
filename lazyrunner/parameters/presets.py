@@ -953,6 +953,12 @@ class PCall(object):
     def __getattr__(self, attr):
         return PCall(combineNames(self._preset_name_, attr))
         
+    def __treedict_hash__(self):
+        p = getParameterTree([self], TreeDict())
+        return p.hash()
+            
+        
+        
         
 class PDeltaTree(object):
     
