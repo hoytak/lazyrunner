@@ -27,8 +27,9 @@ def __initLoggingSystem(custom_opttree):
         datefmt = opttree.logging.datefmt,
         level = logging.DEBUG if opttree.verbose else logging.INFO
     )
-    
-    logging.captureWarnings(True)
+
+    if hasattr(logging, "captureWarnings"):
+        logging.captureWarnings(True)
 
 def clean(custom_opttree = None, **kwargs):
     
