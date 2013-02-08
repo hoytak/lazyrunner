@@ -32,33 +32,33 @@ def resetAndInitModuleLoading(opttree):
     global __loaded_modules
     global __synced_set
     
-    # Clear out all of the modules from the project directory
-    base_dir = abspath(opttree.project_directory)
+    ## Clear out all of the modules from the project directory
+    #base_dir = abspath(opttree.project_directory)
     
-    sub_modules = defaultdict(lambda: [])
-    del_module_keys = []
+    #sub_modules = defaultdict(lambda: [])
+    #del_module_keys = []
     
-    s = sys.modules
+    #s = sys.modules
     
-    for k, m in sys.modules.items():
-	if m is None:
-	    kl = k.split('.')
+    #for k, m in sys.modules.items():
+	#if m is None:
+	    #kl = k.split('.')
 	
-	    for i in xrange(len(kl)):
-		sub_modules['.'.join(kl[:i])].append(k)
+	    #for i in xrange(len(kl)):
+		#sub_modules['.'.join(kl[:i])].append(k)
 		
-	else:
-	    if hasattr(m, "__file__") and abspath(m.__file__).startswith(base_dir):
-		del_module_keys.append(k)
+	#else:
+	    #if hasattr(m, "__file__") and abspath(m.__file__).startswith(base_dir):
+		#del_module_keys.append(k)
 		
-    for k in [k for k in del_module_keys]:
-	del_module_keys += sub_modules[k]
+    #for k in [k for k in del_module_keys]:
+	#del_module_keys += sub_modules[k]
 	
-    for k in del_module_keys:
-	try:
-	    del sys.modules[k]
-	except KeyError:
-	    pass
+    #for k in del_module_keys:
+	#try:
+	    #del sys.modules[k]
+	#except KeyError:
+	    #pass
 	    
     __loaded_modules = {}
     __synced_set = set()

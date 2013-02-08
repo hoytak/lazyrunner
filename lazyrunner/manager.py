@@ -52,7 +52,7 @@ __manager = None
         
 def initialize(custom_opttree = None, **kwargs):
     global __manager
-    
+
     if __manager is not None:
         raise RuntimeError("Initialize has already been called!  Call reset first to reinitialize.")
 
@@ -63,7 +63,7 @@ def initialize(custom_opttree = None, **kwargs):
     custom_opttree.update(TreeDict.fromdict(kwargs)) 
     
     __initLoggingSystem(custom_opttree)
-    
+
     # set up the manager    
     __manager = _RunManager(custom_opttree)
 
