@@ -52,6 +52,8 @@ __default_opttree.logging.datefmt = (str, '%H:%M:%S',
                                     'Format string used for the date in the logging.')
     
 __default_opttree.debug_mode = (is_boolean, False, "Enable debug mode in compilation.")
+__default_opttree.use_hdf5 = (is_boolean, False, "Use hdf5 for caching instead of simple pickling.")
+__default_opttree.cache_compression = (is_boolean, True, "Use bz2 compression on the cache files.")
 __default_opttree.project_directory = (str, '.', "The root of the project directory.")
 __default_opttree.verbose = (is_boolean, False, "Print more detailed diagnostic and progress messages.")
 __default_opttree.no_cache = (is_boolean, False, "Disable the caching system.")

@@ -152,6 +152,8 @@ class PNodeCommon(object):
         self.disk_read_enabled = opttree.disk_read_enabled
         self.disk_write_enabled = opttree.disk_write_enabled
         
+        self.opttree = opttree
+
 
     def getResults(self, parameters, names):
 
@@ -297,26 +299,23 @@ class PNodeCommon(object):
             self.log.debug("Trying to load %s from %s" % (container.getKeyAsString(), filename))
 
             if exists(filename):
+                error_loading = False
+                
                 try:
-                    pt = loadResults(filename)
+                    pt = loadResults(self.opttree, filename)
                 except Exception, e:
                     self.log.error("Exception Raised while loading %s: \n%s"
                                    % (filename, str(e)))
-                    pt = None
+                    error_loading = True
                     
-                if pt is not None:
+                if not error_loading:
 
                     self.log.debug("--> Object successfully loaded.")
-    
-                    if (pt.treeName() == "__ValueWrapper__"
-                        and pt.size() == 1
-                        and "value" in pt):
-                    
-                        container.setObject(pt.value)
-                    else:
-                        container.setObject(pt)
-                        
+                    container.setObject(pt)
                     return
+                else:
+                    pass # go to the disk write enabled part
+                
             else:
                 self.log.debug("--> File does not exist.")
 
@@ -328,34 +327,22 @@ class PNodeCommon(object):
         assert self.disk_write_enabled and container.isDiskWritable()
 
         filename = join(self.cache_directory, container.getFilename())
-        directory = split(filename)[0]
         obj = container.getObject()
 
         self.log.debug("Saving object  %s to   %s." % (container.getKeyAsString(), filename))
 
-            # Make sure it exists
-        if not exists(directory):
-            makedirs(directory)
-
-        if type(obj) is not TreeDict:
-            pt = TreeDict("__ValueWrapper__", value = obj)
-        else:
-            pt = obj
-
         try:
-            saveResults(filename, pt)
-
+            saveResults(self.opttree, filename, obj)
             assert exists(filename)
             
         except Exception, e:
+            
             self.log.error("Exception raised attempting to save object to cache: \n%s" % str(e))
 
             try:
                 remove(filename)
             except Exception:
                 pass
-
-
 
     def _debug_referencesDone(self):
         import gc
