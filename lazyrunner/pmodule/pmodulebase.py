@@ -547,6 +547,13 @@ class PModule:
                                  key, ignore_module, ignore_local,
                                  ignore_dependencies, True, True)
         
+    def getParameters(self, n):
+        """
+        Returns the parameter tree specified
+        """
+
+        return self._pnode.getSpecific("parameters", n)
+
     def getResults(self, r):
         """
         Returns the results from r 

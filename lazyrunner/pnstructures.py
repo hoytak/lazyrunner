@@ -937,6 +937,10 @@ class PNode(object):
                 return results
             elif r_type == "module" and module is not _Null:
                 return module
+            elif r_type == "parameters":
+                return params
+            else:
+                assert False
             
         if r_type == "results":
             return self.common.getResults(ptree, name)
@@ -958,6 +962,15 @@ class PNode(object):
 
             return pn.pullUpToModule().module
 
+        elif r_type == "parameters":
+            pn = PNode(self.common, ptree, name, 'parameters')
+            pn.initialize()
+            pn = self.common.registerPNode(pn)
+            
+            pn.increaseParameterReference()
+            
+            return pn.pullParameters()
+        
         else:
             assert False
                
