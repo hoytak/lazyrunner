@@ -951,6 +951,9 @@ class PCall(object):
         return self
         
     def __getattr__(self, attr):
+        if attr == "__getnewargs__":
+            raise AttributeError
+        
         return PCall(combineNames(self._preset_name_, attr))
         
     def __treedict_hash__(self):
