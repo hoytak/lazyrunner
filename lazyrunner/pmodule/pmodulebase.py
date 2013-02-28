@@ -549,21 +549,24 @@ class PModule:
         
     def getParameters(self, n):
         """
-        Returns the parameter tree specified
+        Returns the parameter tree branch specified.  Note: A Delta
+        object or other result can be used here as well.
         """
 
         return self._pnode.getSpecific("parameters", n)
 
     def getResults(self, r):
         """
-        Returns the results from r 
+        Returns the results from the module specified.  Note: A Delta
+        object or other result can be used here as well.
         """
 
         return self._pnode.getSpecific("results", r)
 
     def getModule(self, m):
         """
-
+        Returns the module instance specified.  Note: A Delta
+        object or other result can be used here as well.
         """
 
         return self._pnode.getSpecific("module", m)

@@ -209,7 +209,7 @@ def createInitial(opttree):
 
 module_template_file = \
 """
-from lazyrunner import pmodule, PModule
+from lazyrunner import pmodule, PModule, defaults, preset
 from treedict import TreeDict
 
 @pmodule
@@ -218,7 +218,11 @@ class %(module_name)s(PModule):
     # The current version of the pmodule.  The caching facilities
     # assume results are different between different versions.
     version = 0.01
-
+    
+    # Add in default parameters here.  
+    
+    p = defaults()
+    
     # Include dependencies here; alternatively, these may be given as
     # class methods, optionally accepting the parameter tree, to
     # provide parameter-dependent dependency checking
@@ -228,7 +232,7 @@ class %(module_name)s(PModule):
     module_dependencies    = []
 
     # If true, the results are never saved or loaded from the cache.
-    disable_result_caching = False
+    disable_result_caching = True
 
     def setup(self):
         # Setup the Pmodule.  Called whenever the module is created.

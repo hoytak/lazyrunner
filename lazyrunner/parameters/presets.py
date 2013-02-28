@@ -951,7 +951,9 @@ class PCall(object):
         return self
         
     def __getattr__(self, attr):
-        if attr == "__getnewargs__":
+        
+        # Prevent the pickler from getting very confused
+        if attr.startswith("__") and attr.endswith("__"):
             raise AttributeError
         
         return PCall(combineNames(self._preset_name_, attr))
