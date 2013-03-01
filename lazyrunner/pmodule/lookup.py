@@ -5,7 +5,6 @@ Manages the lookup tables for the module
 import logging
 import inspect
 import re
-from os.path import samefile
 
 from .. import parameters
 
