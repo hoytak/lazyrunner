@@ -43,7 +43,7 @@ def loadResults(opttree, filename):
                 if fatal_on_error:
                     raise
                 else:
-                    return without_comression(True)
+                    return without_compression(True)
 
         def without_compression(fatal_on_error):
             try:
@@ -52,12 +52,12 @@ def loadResults(opttree, filename):
                 if fatal_on_error:
                     raise
                 else:
-                    return without_comression(True)
+                    return without_compression(True)
         
         if opttree.cache_compression:
             return with_compression(False)
         else:
-            return without_comression(False)
+            return without_compression(False)
         
             
 def saveResults(opttree, filename, obj):
