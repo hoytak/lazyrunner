@@ -983,16 +983,13 @@ class PNode(object):
             try:
                 self.p_class.reportResults(self.parameters, self.parameters[self.name], results)
             except TypeError, te:
-
-                rrf = self.p_class.reportResults
-
-                def raiseTypeError():
-                    raise TypeError(("reportResults method in '%s' must be @classmethod "
+                
+                raise TypeError(("reportResults method in '%s' must be @classmethod "
                                     "and take global parameter tree, local parameter tree, "
                                     "and result tree as arguments.") % name)
 
                 # See if it was due to incompatable signature
-                from robust_inspect import getcallargs
+                from inspect import getcallargs
 
                 try:
                     getcallargs(rrf, parameters, p, r)

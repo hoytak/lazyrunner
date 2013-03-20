@@ -1,4 +1,4 @@
-from presets import getParameterTree
+from presets import getParameterTree, PCall
 
 ################################################################################
 
@@ -62,6 +62,8 @@ class Delta(object):
             self.apply_preset = [apply_preset]
         elif type(apply_preset) is list or type(apply_preset) is tuple:
             self.apply_preset = list(apply_preset)
+        elif isinstance(apply_preset, PCall):
+            self.apply_preset = [apply_preset]
         else:
             raise TypeError("apply_preset must be either string, list, or tuple (not %s)"
                             % str(type(apply_preset)))
