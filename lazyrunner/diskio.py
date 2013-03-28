@@ -113,6 +113,14 @@ def saveTreeDictToGroup(g, p):
                 
 def saveObjectToGroup(g, key, v, force_pickling = False):
 
+    def write_it(key, data, **kwargs):
+        if type(data) is str:
+            # So stupid.  Gets around bug in h5py
+            data = base64.b64encode(data)
+
+        g.create_dataset(key, data, **kwargs)
+        
+
     assert type(key) is str
     
     if not force_pickling and isinstance(v, ndarray) and not isinstance(v, dtype):
@@ -152,6 +160,9 @@ def loadObjectFromGroup(g, key):
     except Exception, e:
         raise IOError(("Error retrieving treedict from group %s:\n" % g.name)
                           + str(e))
+
+    if type(v) is str:
+        v = base64.b64decode(v)
     
     if isinstance(v, basestring):
         return loads(v)
