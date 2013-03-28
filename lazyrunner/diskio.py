@@ -3,6 +3,7 @@ import h5py
 import os, os.path as osp
 import cPickle
 from bz2 import BZ2File
+import base64
 
 from treedict import TreeDict
 from numpy import ndarray, dtype
