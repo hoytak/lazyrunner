@@ -118,6 +118,13 @@ class PModule:
         res_dep = getDep("result")
         par_dep = getDep("parameter")
 
+	if mod_dep:
+	    cls.log.debug("Module '%s' depends on modules %s." % (cls._name, ", ".join(str(m) for m in mod_dep)))
+	if res_dep:
+	    cls.log.debug("Module '%s' depends on results %s." % (cls._name, ", ".join(str(m) for m in res_dep)))
+	if par_dep:
+	    cls.log.debug("Module '%s' depends on parameter branches %s." % (cls._name, ", ".join(str(m) for m in par_dep)))
+
         return (mod_dep, res_dep, par_dep)
         
 

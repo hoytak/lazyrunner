@@ -956,6 +956,10 @@ class PCall(object):
         if attr.startswith("__") and attr.endswith("__"):
             raise AttributeError
         
+        if attr == "clear":
+            # Clears all modifications of the preset tree and restores it to its original.
+            return PClearTree(self._preset_name_)
+
         return PCall(combineNames(self._preset_name_, attr))
         
     def __treedict_hash__(self):
@@ -974,6 +978,17 @@ class PDeltaTree(object):
     def __call__(self, p_tree):
         p_tree.update(self.tree)
         
+class PClearTree(object):
+    def __init__(self, name):
+        self.name = name
+        self._preset_name_ = name + ".clear"
+        
+    def __call__(self, parameters=None, list_args=None, kw_args=None):
+        if parameters is None:
+            return self
+        
+        parameters[self.name].clear()
+        parameters[self.name].update(getDefaultTree()[self.name])
 
 
 def updatePresetCompletionCache(filename):
@@ -1101,6 +1116,12 @@ def parsePreset(preset):
         list_args = preset._preset_args_
         kw_args = preset._preset_kwargs_
     
+    elif isinstance(preset, PClearTree):
+        name = preset._preset_name_.lower()
+        preset_wrapper = preset     
+        list_args = []
+        kw_args = {}
+
     elif type(preset) is TreeDict:
         name = None
         preset_wrapper = PDeltaTree(preset)
