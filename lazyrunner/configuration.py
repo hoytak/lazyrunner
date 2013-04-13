@@ -65,6 +65,7 @@ __default_opttree.cache_directory = ([str, type(None)], None, "The cache directo
 __default_opttree.import_list = (list, [], "List of modules / directories to import in loading project.")
 __default_opttree.auto_import = (is_boolean, True, "Automatically import all subdirs with __init__.py files.")
 __default_opttree.cython.use_cpp = (is_boolean, False, "Compile cython extensions in C++ mode.")
+__default_opttree.minimal_cache_persistence = (is_boolean, False, "Clear out objects from the cache as quickly as possible.")
 
 __default_opttree.cython.compiler_args = (list, [], "Additional arguments to use when compiling cython extensions.")
 __default_opttree.cython.link_args = (list, [], "Additional arguments to use when linking cython extensions.")

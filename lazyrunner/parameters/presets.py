@@ -988,7 +988,7 @@ class PClearTree(object):
             return self
         
         parameters[self.name].clear()
-        parameters[self.name].update(getDefaultTree()[self.name])
+        parameters[self.name].update(getDefaultTree(deep_copy = False)[self.name].copy(deep = True))
 
 
 def updatePresetCompletionCache(filename):
@@ -1180,6 +1180,7 @@ def getParameterTree(presets, parameters = None):
         parameters = getDefaultTree()
     else:
         assert type(parameters) is TreeDict
+        parameters = parameters.copy(deep = True)
     
     for pt in preset_list:
         pt.preset(parameters, pt.list_args, pt.kw_args)

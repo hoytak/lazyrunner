@@ -141,8 +141,8 @@ class PNodeCommon(object):
 
         # This is for node filtering, i.e. eliminating duplicates
         self.pnode_lookup = weakref.WeakValueDictionary()
-
         self.non_persistant_pointer_lookup = weakref.WeakValueDictionary()
+            
         self.non_persistant_deleter = _PNodeNonPersistentDeleter(self)
 
         # This is for local cache lootup
@@ -262,7 +262,8 @@ class PNodeCommon(object):
                 #     for v in cache.cache.itervalues():
                 #         print "%s: ref_count = %d" % (v.getObjectKey(), v.objRefCount())
                 
-                del self.cache_lookup[key]
+                if self.opttree.minimal_cache_persistence:
+                    del self.cache_lookup[key]
 
     def loadContainer(self, container, no_local_caching = False):
 

@@ -68,8 +68,8 @@ def modifyGlobalDefaultTree(tree):
     __default_tree.update(tree)
     
 
-def getDefaultTree():
+def getDefaultTree(deep_copy = True):
     
     global __default_tree
     
-    return __default_tree.copy()
+    return __default_tree.copy(deep = deep_copy)
