@@ -115,9 +115,13 @@ def saveTreeDictToGroup(g, p):
 def saveObjectToGroup(g, key, v, force_pickling = False):
 
     def write_it(key, data, **kwargs):
-        if type(data) is str:
+        assert type(data) is not unicode
+
+        assert 0 not in list(key)
+        
+        if type(data) in [str, bytes, unicode]:
             # So stupid.  Gets around bug in h5py
-            data = base64.b64encode(data)
+            data = str(base64.b64encode(data))
 
         g.create_dataset(key, data, **kwargs)
         

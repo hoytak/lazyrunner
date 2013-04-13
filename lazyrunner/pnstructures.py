@@ -2,7 +2,7 @@ from treedict import TreeDict
 from parameters import applyPreset
 from collections import defaultdict
 from os.path import join, abspath, exists, split
-from os import makedirs
+from os import makedirs, remove
 import hashlib, base64, weakref, sys, gc, logging
 from itertools import chain
 from collections import namedtuple
@@ -308,7 +308,7 @@ class PNodeCommon(object):
                     self.log.error("Exception Raised while loading %s: \n%s"
                                    % (filename, str(e)))
                     error_loading = True
-                    
+
                 if not error_loading:
 
                     self.log.debug("--> Object successfully loaded.")
@@ -344,6 +344,8 @@ class PNodeCommon(object):
                 remove(filename)
             except Exception:
                 pass
+
+            raise
 
     def _debug_referencesDone(self):
         import gc
@@ -985,17 +987,17 @@ class PNode(object):
                 self.p_class.reportResults(self.parameters, self.parameters[self.name], results)
             except TypeError, te:
                 
-                raise TypeError(("reportResults method in '%s' must be @classmethod "
-                                    "and take global parameter tree, local parameter tree, "
-                                    "and result tree as arguments.") % name)
+                # raise TypeError(("reportResults method in '%s' must be @classmethod "
+                #                     "and take global parameter tree, local parameter tree, "
+                #                     "and result tree as arguments.") % self.name)
 
-                # See if it was due to incompatable signature
-                from inspect import getcallargs
+                # # See if it was due to incompatable signature
+                # from inspect import getcallargs
 
-                try:
-                    getcallargs(rrf, parameters, p, r)
-                except TypeError:
-                    raiseTypeError()
+                # try:
+                #     getcallargs(rrf, parameters, p, r)
+                # except TypeError:
+                #     raiseTypeError()
 
                 # Well, that wasn't the issue, so it's something internal; re-raise
                 raise
