@@ -4,7 +4,6 @@ Manages the lookup tables for the module
 
 import logging
 import inspect
-import re
 
 from .. import parameters
 
@@ -26,7 +25,7 @@ def addToRunQueue(module_name):
     global _pmodule_run_set
 
     if type(module_name) is not str:
-        raise TypeError("Type of module in run queue must be str (not '%s')" % str(type(m)))
+        raise TypeError("Type of module in run queue must be str (not '%s')" % str(type(module_name)))
             
     n = module_name.lower()
 

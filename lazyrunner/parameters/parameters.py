@@ -2,13 +2,6 @@
 The central place for handling parameters.
 """
 
-import sys, textwrap
-import re
-import warnings
-import os, struct
-from os.path import commonprefix
-import common
-
 from treedict import TreeDict
 
 ################################################################################
@@ -60,7 +53,6 @@ def finalizeDefaultTree():
         b.pop("__defaultpresettree__", silent = True)
 
     __default_tree.freeze()
-    __default_tree_finalized = True
     
 def modifyGlobalDefaultTree(tree):
     global __default_tree
