@@ -278,15 +278,37 @@ def setupOptionTree(custom_opttree, log, include_config_file):
     if not include_config_file:
         return opttree
 
-    if abspath(normpath(expanduser(os.getcwd()))) != opttree.project_directory:
-        log.info("Using '%s' as project directory." % opttree.project_directory)
-
     # Load in the config information based on what we have here
     resetAndInitConfig()
+
+    # See if we can get the conf stuff to work; even if it's in a base directory
     checkType(opttree.config_file, str, "config_file")
+
+    cwd = abspath(normpath(expanduser(os.getcwd())))
+
+    def has_conf_file(d):
+        cf = join(d, (opttree.config_file + ('' if opttree.config_file.endswith('.py') else '.py')))
+        return exists(cf)
+
+    if cwd == opttree.project_directory and not has_conf_file(cwd):
+        d = opttree.project_directory
+
+        while True:
+            d = split(d)[0]
+            if not d:
+                raise ConfigError(("Directory or parent directories do not appear to have "
+                                   "configuration file '%s'.") % opttree.config_file)
+            if has_conf_file(d):
+                opttree.project_directory = d
+                break
+
     loading.loadModule(join(opttree.project_directory, opttree.config_file))
+
     config_tree = finalizeLoadedConfigTree()
-    
+
+    if cwd != opttree.project_directory:
+        log.info("Using '%s' as project directory." % opttree.project_directory)
+
     # Now, just need to reload things so it's all in the proper priority...
     opttree = base_opttree.copy()
     opttree.update(custom_opttree)

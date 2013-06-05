@@ -1,5 +1,5 @@
 from presets import getParameterTree, PCall
-
+from treedict import TreeDict
 ################################################################################
 
 class Direct(object):
@@ -50,14 +50,22 @@ class Delta(object):
  
     __parameter_container__ = True
  
-    def __init__(self, p_name, local_delta = None, delta = None, apply_preset = None, name = None):
+    def __init__(self, p_name = None, *args, **kw_args):
 
-        self.name = p_name.lower().strip()
-        self.local_delta = local_delta
-        self.delta = delta
-        
+        self.name = p_name.lower().strip() if p_name is not None else None
+
+        self.local_delta = kw_args.get("local_delta", None)
+        if self.local_delta is not None and self.name is None:
+            raise ValueError("If local_delta is specified, then p_name must be given.")
+
+        self.delta = kw_args.get("delta", None)
+        self.setName(p_name)
+
+        # Deal with the apply preset
+        apply_preset = kw_args.get("apply_preset", []) + kw_args.get("presets", [])
+
         if apply_preset is None:
-            self.apply_preset = None
+            self.apply_preset = []
         elif type(apply_preset) is str:
             self.apply_preset = [apply_preset]
         elif type(apply_preset) is list or type(apply_preset) is tuple:
@@ -67,9 +75,26 @@ class Delta(object):
         else:
             raise TypeError("apply_preset must be either string, list, or tuple (not %s)"
                             % str(type(apply_preset)))
-        
-        self.load_name = name
 
+        for a in args:
+            if isinstance(a, PCall) or type(a) is str:
+                self.apply_preset.append(a)
+
+        args = [a for a in args if not (isinstance(a, PCall) or type(a) is str)]
+
+        for a in args:
+            if type(a) is TreeDict:
+                if self.delta is None:
+                    self.delta = TreeDict()
+                self.delta.update(a)
+
+        args = [a for a in args if type(a) is not TreeDict]
+
+        if len(args) != 0:
+            raise ValueError("Could not interpret all parameters to Delta function.")
+
+        self.load_name = kw_args.get("load_name", None)
+        
     def _getParameters(self, raw_parameters):
 
         # First make a copy of the full parameter tree.
@@ -89,3 +114,6 @@ class Delta(object):
 
     def _getLoadName(self):
         return self.load_name
+
+    def setPName(self, name):
+        self.name = name.lower().strip() if name is not None else None

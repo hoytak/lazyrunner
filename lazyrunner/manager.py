@@ -2,11 +2,9 @@
 A class that manages a batch of sessions.  
 """
 
-import time, logging, sys
-from os import makedirs, remove
-from os.path import join, expanduser, exists, split, abspath, normpath
+import logging
 from treedict import TreeDict
-from pnstructures import PNodeCommon, PNode
+from pnstructures import PNodeCommon
 
 import parameters as parameter_module
 import pmodule
@@ -142,7 +140,7 @@ class _RunManager(object):
         return dict(zip(modules, results)) 
     
     def getPresetHelp(self, width = None):
-        return '\n'.join(parameters_module.getPresetHelpList(width = width))
+        return '\n'.join(parameter_module.getPresetHelpList(width = width))
     
     def updatePresetCompletionCache(self, preset_name_cache_file):
         parameter_module.presets.updatePresetCompletionCache(preset_name_cache_file)
@@ -161,6 +159,6 @@ def run(modules, presets = [], project_directory = '.', options = None):
         
     options.project_directory = project_directory
      
-    m = RunManager(options)
+    m = _RunManager(options)
     
     return m.getResults(modules, presets)
