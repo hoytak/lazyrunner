@@ -42,6 +42,20 @@ def defaults():
 ################################################################################
 # Functions for pulling out the presets from a PModule
 
+class PModuleDirectParameterSetting(object):
+    # Directly sets parameters if the module name is called as a
+    # preset.
+    
+    def __call__(self, ptree, *list_args, **kw_args):
+        if list_args:
+            if len(list_args) == 1 and type(list_args[0]) in TreeDict:
+                ptree.update(list_args[0])
+            else:
+                raise ValueError("Direct parameter setting called: "
+                                 "Can only modify parameter tree values by keyword arguments or a single TreeDict instance.")
+
+        ptree.update(kw_args)
+
 def processPModule(pm):
 
     global __default_tree
@@ -53,7 +67,8 @@ def processPModule(pm):
 
     def _process_pmodule(pm, name):
 
-        # Do it first so that higher level things are overridden by upper level ones
+        # Do it first so that higher level things are overridden by
+        # upper level ones
         for base in pm.__bases__:
             _process_pmodule(base, name)
         
@@ -86,8 +101,12 @@ def processPModule(pm):
                 already_processed.add(t.__name__)
                 
     _process_pmodule(pm, pm._name)
-    
-                
+
+    __preset_staging[pm._name] = _PresetWrapper(
+        pm._name, pm._name, PModuleDirectParameterSetting(),
+        "Directly modifies the Parameter Tree for %s." % pm._name,
+        None)
+
     
 ############################################################
 # A container for holding the preset
@@ -102,7 +121,6 @@ class _PresetWrapper:
         self.apply = apply
 
     def __call__(self, ptree, list_args = [], kw_args = {}):
-
         assert type(list_args) is list
         assert type(kw_args) is dict
 
@@ -252,6 +270,7 @@ def finalizePresetLookup():
     for pw in __preset_staging.itervalues():
 
         if type(pw) is TreeDict:
+            # It's the default tree of a processing module.
             del pw["__defaultpresettree__"]
             modifyGlobalDefaultTree(pw)
             continue
@@ -1112,10 +1131,10 @@ def parsePreset(preset):
             
     elif isinstance(preset, PCall):
         name = preset._preset_name_.lower()
-        preset_wrapper = __preset_lookup[__presetTreeName(name)]        
+        preset_wrapper = __preset_lookup[__presetTreeName(name)]       
         list_args = preset._preset_args_
         kw_args = preset._preset_kwargs_
-    
+        
     elif isinstance(preset, PClearTree):
         name = preset._preset_name_.lower()
         preset_wrapper = preset     
